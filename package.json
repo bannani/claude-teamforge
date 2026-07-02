@@ -1,0 +1,13 @@
+{
+  "name": "claude-teamforge",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/",
+    "worker": "node worker/server.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

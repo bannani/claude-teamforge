@@ -1,0 +1,17 @@
+{
+  "name": "claude-teamforge",
+  "version": "0.1.0",
+  "description": "Claude works as a visible team: Brainstorm → Spec → Plan → Implementation with enforced validation gates, a live mission-control dashboard, and persistent project memory.",
+  "author": {
+    "name": "Fares"
+  },
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "team",
+    "dashboard",
+    "gates",
+    "tdd",
+    "memory"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "teamforge-local",
+  "owner": {
+    "name": "fares"
+  },
+  "plugins": [
+    {
+      "name": "claude-teamforge",
+      "source": "./",
+      "description": "Visible AI team workflow with enforced gates, live dashboard, and project memory."
+    }
+  ]
+}
