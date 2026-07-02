@@ -22,9 +22,11 @@ none), styling preferences, single page vs routing — one at a time. Answer the
 
 Claude writes a short spec into `docs/` (markdown is allowed through the gate) and
 advances to **spec_gate**. The dashboard shows the amber **"Waiting for you"** panel
-with the validation question. Claude stops and asks you in chat.
+with the validation question and two buttons; Claude blocks on `validate wait`.
 
-Say: **"Approved."** → the timeline logs `spec_gate: approved`, phase unlocks.
+Click **✓ Approve** on the dashboard (optionally with a comment) → Claude unblocks
+instantly, the timeline logs `spec_gate: approved`, the phase unlocks. Answering in
+chat still works too.
 
 ## 4. Plan + second gate ✋
 

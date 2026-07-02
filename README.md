@@ -9,7 +9,9 @@ Brainstorm → Questions → Spec → ✋ → Plan → ✋ → Implementation �
 
 The ✋ gates are **user validations** — and they're not polite suggestions: a local
 worker enforces the state machine, and a PreToolUse hook **denies writing source
-files** until you've validated the spec and the plan.
+files** until you've validated the spec and the plan. Answer gates by **clicking
+✓ Approve / ✎ Request changes right on the dashboard** (Claude waits for your click)
+or in chat — whichever you reach first.
 
 ## How it works
 
@@ -52,7 +54,7 @@ Demo script: [docs/DEMO.md](docs/DEMO.md).
 ## Development
 
 ```
-npm test                      # 31 tests: state machine, storage, API, CLI, gate hook
+npm test                      # 34 tests: state machine, storage, API, CLI, gate hook
 cd dashboard && npm run dev   # dashboard dev server (proxies to the worker)
 ```
 

@@ -77,6 +77,15 @@ async function ensureWorker() {
   process.exit(3);
 }
 
+function openBrowser(url) {
+  try {
+    const [cmd, args] = process.platform === 'darwin' ? ['open', [url]]
+      : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+        : ['xdg-open', [url]];
+    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
+  } catch { /* headless is fine */ }
+}
+
 const USAGE = `teamforge <command>
   start --name <n> --title <t> [--project <path>]
   state | phase <phase>
@@ -84,6 +93,8 @@ const USAGE = `teamforge <command>
   task add <title> [--role <role>] | task set <id> <status>
   decide <title> [--detail <d>] | decide-set <id> approved|rejected
   validate ask <gate> <question> | validate set <id> approved|changes_requested [--answer <a>]
+  validate wait <id> [--timeout <seconds>]   (blocks until answered in dashboard or chat)
+  open                                       (open the dashboard in the browser)
   event <kind> [--json <payload>]
   gate-check <file_path>
   ensure-worker`;
@@ -95,12 +106,18 @@ async function main() {
   if (opts.project) process.env.TEAMFORGE_PROJECT = opts.project;
 
   switch (cmd) {
-    case 'start':
-      return print(await api('POST', '/api/sessions', {
+    case 'start': {
+      const out = await api('POST', '/api/sessions', {
         project_path: project,
         project_name: opts.name || project.split('/').at(-1),
         title: opts.title || '',
-      }));
+      });
+      if (!('no-open' in opts)) openBrowser(BASE);
+      return print(out);
+    }
+    case 'open':
+      openBrowser(BASE);
+      return print({ ok: true, url: BASE });
     case 'state':
       return print(await activeSession());
     case 'phase': {
@@ -144,6 +161,16 @@ async function main() {
         return print(await api('PATCH', `/api/validations/${rest[1]}`, {
           status: rest[2], answer: opts.answer || '',
         }));
+      }
+      if (rest[0] === 'wait') {
+        const deadline = Date.now() + Number(opts.timeout || 240) * 1000;
+        while (Date.now() < deadline) {
+          const { validation } = await api('GET', `/api/validations/${rest[1]}`);
+          if (validation.status !== 'pending') return print({ validation });
+          await new Promise((r) => { setTimeout(r, 1500); });
+        }
+        print({ timeout: true, id: Number(rest[1]) });
+        process.exit(4);
       }
       break;
     }

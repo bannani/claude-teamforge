@@ -30,7 +30,7 @@ after(() => server.close());
 const cli = (...args) => run(process.execPath, [CLI, ...args], { env });
 
 test('start creates a session', async () => {
-  const { stdout } = await cli('start', '--name', 'Demo', '--title', 'CLI demo');
+  const { stdout } = await cli('start', '--name', 'Demo', '--title', 'CLI demo', '--no-open', '1');
   const out = JSON.parse(stdout);
   assert.equal(out.session.phase, 'idea');
   assert.equal(out.session.project_path, PROJECT);
@@ -61,6 +61,27 @@ test('agent, task, decide, validate, event round-trip', async () => {
   assert.equal(state.agents.find((a) => a.role === 'pm').status, 'working');
   assert.equal(state.tasks[0].status, 'done');
   assert.equal(state.validations[0].status, 'approved');
+});
+
+test('validate wait blocks until the dashboard answers', async () => {
+  const v = JSON.parse((await cli('validate', 'ask', 'plan_gate', 'Approve plan?')).stdout);
+  const id = v.validation.id;
+  const waiting = cli('validate', 'wait', String(id), '--timeout', '20');
+  setTimeout(() => {
+    cli('validate', 'set', String(id), 'approved', '--answer', 'clicked ✓');
+  }, 400);
+  const { stdout } = await waiting;
+  const out = JSON.parse(stdout);
+  assert.equal(out.validation.status, 'approved');
+  assert.equal(out.validation.answer, 'clicked ✓');
+});
+
+test('validate wait times out with exit 4', async () => {
+  const v = JSON.parse((await cli('validate', 'ask', 'done_gate', 'Ship?')).stdout);
+  await assert.rejects(
+    cli('validate', 'wait', String(v.validation.id), '--timeout', '0'),
+    (err) => { assert.equal(err.code, 4); return true; },
+  );
 });
 
 test('gate-check exits 2 on deny', async () => {

@@ -31,11 +31,11 @@ implementation → tests → review → done_gate → done`
 **On any new build/feature request** (user describes something to create):
 
 1. `teamforge ensure-worker` then `teamforge start --name "<project>" --title "<one-line idea>"`
-   Tell the user the dashboard is live at http://127.0.0.1:4519.
+   This auto-opens the dashboard in the user's browser (`teamforge open` reopens it).
 2. **brainstorm** — `teamforge phase brainstorm`; `teamforge agent pm --status working --note "brainstorming"`. Explore the idea: purpose, users, constraints, success criteria. NO CODE.
 3. **questions** — `teamforge phase questions`. Ask the user clarifying questions (one at a time, multiple choice when possible).
 4. **spec** — `teamforge phase spec`. Write a short readable spec (markdown file in the project's `docs/`). Record key choices: `teamforge decide "<title>" --detail "<why>"`.
-5. **spec_gate** — `teamforge phase spec_gate`; `teamforge validate ask spec_gate "<summary question>"`. **STOP. Ask the user to validate the spec in chat. Do not proceed on your own.** When they answer: `teamforge validate set <id> approved --answer "<their words>"` (or `changes_requested` → go back to spec).
+5. **spec_gate** — `teamforge phase spec_gate`; `teamforge validate ask spec_gate "<summary question>"` (note the returned validation `id`). **STOP — this is the user's decision.** Follow the gate procedure below.
 6. **plan** — `teamforge phase plan`; `teamforge agent architect --status working`. Write the implementation plan; split into small tasks: `teamforge task add "<task title>" --role frontend|backend|qa`. Major architecture decisions: `teamforge decide` + ask the user before locking them in.
 7. **plan_gate** — `teamforge phase plan_gate`; `teamforge validate ask plan_gate "..."`. **STOP for user validation again.**
 8. **implementation** — `teamforge phase implementation`. Execute tasks in order:
@@ -47,6 +47,16 @@ implementation → tests → review → done_gate → done`
 10. **review** — `teamforge phase review`; `teamforge agent reviewer --status working`. Review the whole diff against the spec (or dispatch the `teamforge-reviewer` subagent). Fix findings.
 11. **done_gate** — `teamforge phase done_gate`; `teamforge validate ask done_gate "..."`. **STOP. Show the user a final summary (what was built, files, test results) and ask them to confirm completion.**
 12. **done** — `teamforge phase done`. Record remaining decisions with `teamforge decide` and approve the good ones with `teamforge decide-set <id> approved` — these become permanent project memory injected into future sessions.
+
+## Gate procedure (all three gates)
+
+1. `teamforge validate ask <gate> "<question>"` → note the `id` in the JSON output.
+2. Tell the user in chat what needs validating, and that they can **click ✓ Approve or ✎ Request changes on the dashboard** — no need to type in the terminal.
+3. Run `teamforge validate wait <id> --timeout 240` (use a Bash timeout ≥ 250s). Outcomes:
+   - Prints `"status":"approved"` → thank them (mention their comment if any) and advance the phase.
+   - Prints `"status":"changes_requested"` → read the `answer` comment, go back to the previous phase, revise, then gate again.
+   - Exit code 4 (timeout) → they haven't clicked; ask again in chat and wait for a chat reply, then record it with `teamforge validate set <id> <status> --answer "<their words>"`.
+   - If the user answers in chat while you wait, use `validate set` with their words.
 
 ## Hard rules
 

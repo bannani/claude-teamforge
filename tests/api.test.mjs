@@ -104,6 +104,19 @@ test('agents, tasks, decisions, events land in snapshot', async () => {
   assert.equal(mem.decisions[0].title, 'Use Vite');
 });
 
+test('validation can be fetched by id (dashboard answer flow)', async () => {
+  const v = await api('POST', `/api/sessions/${sid}/validations`, {
+    gate: 'done_gate', question: 'Ship it?',
+  });
+  const id = v.body.validation.id;
+  assert.equal((await api('GET', `/api/validations/${id}`)).body.validation.status, 'pending');
+  await api('PATCH', `/api/validations/${id}`, { status: 'approved', answer: 'clicked in dashboard' });
+  const after = (await api('GET', `/api/validations/${id}`)).body.validation;
+  assert.equal(after.status, 'approved');
+  assert.equal(after.answer, 'clicked in dashboard');
+  assert.equal((await api('GET', '/api/validations/99999')).status, 404);
+});
+
 test('SSE stream sends snapshot on connect and on mutation', async () => {
   const res = await fetch(`${base}/events?project=/proj/todo`);
   const reader = res.body.getReader();

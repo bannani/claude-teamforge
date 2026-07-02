@@ -53,7 +53,13 @@ export function createTeamforgeServer({ dbPath = DEFAULT_DB_PATH, distDir = DIST
     let m;
 
     if (req.method === 'GET' && pathname === '/api/health') {
-      return json(res, 200, { ok: true, version: '0.1.0' });
+      return json(res, 200, { ok: true, version: '0.2.0' });
+    }
+
+    if (req.method === 'GET' && (m = pathname.match(/^\/api\/validations\/(\d+)$/))) {
+      const validation = db.getValidation(Number(m[1]));
+      if (!validation) return json(res, 404, { error: 'validation not found' });
+      return json(res, 200, { validation });
     }
 
     if (req.method === 'GET' && pathname === '/api/state') {

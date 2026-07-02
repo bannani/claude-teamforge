@@ -117,6 +117,10 @@ export function openDb(path = DEFAULT_DB_PATH) {
       return db.prepare('SELECT * FROM validations WHERE id = ?').get(Number(id));
     },
 
+    getValidation(id) {
+      return db.prepare('SELECT * FROM validations WHERE id = ?').get(id);
+    },
+
     answerValidation(id, status, answer = '') {
       db.prepare('UPDATE validations SET status = ?, answer = ? WHERE id = ?').run(status, answer, id);
       const v = db.prepare('SELECT * FROM validations WHERE id = ?').get(id);
