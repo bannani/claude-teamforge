@@ -133,52 +133,78 @@ h3 { font-size: 14px; margin-bottom: 10px; }
 .grid-main { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
 .col { display: flex; flex-direction: column; gap: 14px; }
 
-/* ---- workspace (avatar desks) ---- */
-.workspace { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.desk {
-  padding: 16px 12px 14px;
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
-  text-align: center; transition: border-color 0.3s ease;
+/* ---- crew room (Among-Us-style workspace) ---- */
+.crew-panel { padding: 8px; }
+.crew-room {
+  position: relative; height: 420px; border-radius: 12px; overflow: hidden;
+  background:
+    radial-gradient(600px 300px at 50% 0%, rgba(139, 124, 246, 0.08), transparent 70%),
+    linear-gradient(rgba(120, 160, 255, 0.055) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(120, 160, 255, 0.055) 1.5px, transparent 1.5px),
+    #0c1220;
+  background-size: auto, 42px 42px, 42px 42px, auto;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.5);
 }
-.desk-name { font-size: 12.5px; margin: 0; }
-.desk.working { border-color: hsla(var(--hue), 80%, 65%, 0.65); animation: pulse 1.8s ease-in-out infinite; }
-.desk.done { border-color: rgba(74, 222, 128, 0.45); }
-.desk.blocked { border-color: rgba(248, 113, 113, 0.55); }
-.desk.idle { opacity: 0.72; }
 
-.avatar-wrap { position: relative; }
-.avatar {
-  width: 62px; height: 62px; border-radius: 50%; padding: 3px;
-  background: conic-gradient(from 0deg,
-    hsl(var(--hue), 85%, 62%), hsl(calc(var(--hue) + 60), 85%, 62%), hsl(var(--hue), 85%, 62%));
+.station {
+  position: absolute; width: 58px; height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(#1b2437, #141b2c);
+  border: 1.5px solid rgba(120, 160, 255, 0.22);
+  transition: box-shadow 0.5s ease, border-color 0.5s ease;
 }
-.desk.working .avatar { animation: bob 1.4s ease-in-out infinite, spin 5s linear infinite paused; }
-.avatar-face {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%; border-radius: 50%;
-  background: #131a2c; font-size: 27px;
+.station::after {
+  content: ''; position: absolute; inset: 4px 6px;
+  border-radius: 3px; background: rgba(120, 160, 255, 0.1);
 }
-.status-dot {
-  position: absolute; bottom: 2px; right: 2px;
-  width: 13px; height: 13px; border-radius: 50%;
-  border: 2.5px solid #0d1322; background: var(--muted);
-}
-.status-dot.working { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
-.status-dot.done { background: var(--green); }
-.status-dot.blocked { background: var(--red); }
-@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+.station.lit { border-color: var(--c); box-shadow: 0 0 18px var(--c); }
+.station.lit::after { background: var(--c); opacity: 0.5; animation: breathe 1.4s infinite; }
 
-.agent-note { font-size: 11px; color: var(--muted); min-height: 26px; }
+.crew {
+  position: absolute; width: 58px;
+  transform: translate(-50%, -55%);
+  transition: left 2.4s ease-in-out, top 2.4s ease-in-out;
+  cursor: pointer; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+}
+.crew:hover { z-index: 5; }
+.crew:hover .crew-svg { transform: scale(1.12); }
+.crew-svg { width: 54px; transition: transform 0.15s ease; }
+.crew.working .crew-svg { animation: crew-work 0.65s ease-in-out infinite; }
+.crew.idle .crew-svg { animation: crew-idle 3.4s ease-in-out infinite; }
+.crew.blocked .crew-svg { animation: crew-shake 0.5s ease-in-out infinite; }
+.crew.done .crew-svg { filter: saturate(0.8) brightness(1.05); }
+.crew.selected .crew-svg { filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.6)); }
+@keyframes crew-work { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3.5px); } }
+@keyframes crew-idle { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-2px) rotate(1.5deg); } }
+@keyframes crew-shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+
+.crew-name {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+  margin-top: -3px; padding: 2px 7px; border-radius: 999px;
+  background: rgba(10, 14, 23, 0.8); border: 1px solid var(--c); color: var(--c);
+  white-space: nowrap;
+}
+
+.crew-alert, .crew-check {
+  position: absolute; top: -16px; font-size: 15px; font-weight: 900; z-index: 3;
+}
+.crew-alert { color: var(--red); animation: bounce-alert 0.7s infinite; text-shadow: 0 0 8px var(--red); }
+.crew-check { color: var(--green); text-shadow: 0 0 8px rgba(74, 222, 128, 0.7); }
+@keyframes bounce-alert { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
 .bubble {
-  position: relative; font-size: 11px; color: var(--text);
-  background: hsla(var(--hue), 70%, 60%, 0.12);
-  border: 1px solid hsla(var(--hue), 70%, 60%, 0.35);
-  border-radius: 10px; padding: 6px 9px; max-width: 100%;
+  position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+  font-size: 10.5px; color: var(--text); white-space: nowrap; z-index: 4;
+  background: rgba(16, 22, 38, 0.95); border: 1px solid rgba(120, 160, 255, 0.35);
+  border-radius: 10px; padding: 5px 9px;
   display: flex; align-items: center; gap: 6px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis;
 }
 .typing { display: inline-flex; gap: 2.5px; }
 .typing i {
-  width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--cyan);
   animation: blink 1.2s infinite;
 }
 .typing i:nth-child(2) { animation-delay: 0.2s; }
@@ -188,6 +214,20 @@ h3 { font-size: 14px; margin-bottom: 10px; }
   0%, 100% { box-shadow: 0 0 10px rgba(79, 216, 235, 0.12); }
   50% { box-shadow: 0 0 26px rgba(79, 216, 235, 0.38); }
 }
+
+.crew-popup {
+  position: absolute; left: 12px; bottom: 12px; z-index: 10;
+  min-width: 240px; max-width: 320px; padding: 13px;
+  background: rgba(14, 20, 34, 0.96);
+}
+.crew-popup-head { display: flex; align-items: center; gap: 10px; }
+.crew-popup-head strong { flex: 1; font-size: 14px; }
+.popup-close {
+  background: none; border: none; color: var(--muted); font-size: 18px;
+  cursor: pointer; line-height: 1;
+}
+.crew-popup-note { font-size: 12.5px; margin: 8px 0 6px; }
+.crew-popup-log { list-style: none; font-size: 11px; display: flex; flex-direction: column; gap: 4px; }
 
 /* ---- badges ---- */
 .badge {

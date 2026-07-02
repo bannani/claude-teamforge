@@ -32,6 +32,7 @@ implementation → tests → review → done_gate → done`
 
 1. `teamforge ensure-worker` then `teamforge start --name "<project>" --title "<one-line idea>"`
    This auto-opens the dashboard in the user's browser (`teamforge open` reopens it).
+   If the output says `"opened":false`, give the user the link http://127.0.0.1:4519 instead.
 2. **brainstorm** — `teamforge phase brainstorm`; `teamforge agent pm --status working --note "brainstorming"`. Explore the idea: purpose, users, constraints, success criteria. NO CODE.
 3. **questions** — `teamforge phase questions`. Ask the user clarifying questions (one at a time, multiple choice when possible).
 4. **spec** — `teamforge phase spec`. Write a short readable spec (markdown file in the project's `docs/`). Record key choices: `teamforge decide "<title>" --detail "<why>"`.

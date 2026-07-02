@@ -77,13 +77,26 @@ async function ensureWorker() {
   process.exit(3);
 }
 
-function openBrowser(url) {
-  try {
-    const [cmd, args] = process.platform === 'darwin' ? ['open', [url]]
-      : process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-        : ['xdg-open', [url]];
-    spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
-  } catch { /* headless is fine */ }
+async function openBrowser(url) {
+  const candidates = process.platform === 'darwin' ? [['open', [url]]]
+    : process.platform === 'win32' ? [['cmd', ['/c', 'start', '', url]]]
+      : [
+        ...(process.env.BROWSER ? [[process.env.BROWSER, [url]]] : []),
+        ['xdg-open', [url]], ['sensible-browser', [url]],
+        ['google-chrome', [url]], ['chromium', [url]], ['firefox', [url]],
+      ];
+  for (const [cmd, args] of candidates) {
+    const ok = await new Promise((resolve) => {
+      let child;
+      try {
+        child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+      } catch { resolve(false); return; }
+      child.once('error', () => resolve(false));
+      setTimeout(() => { child.unref(); resolve(true); }, 200);
+    });
+    if (ok) return true;
+  }
+  return false;
 }
 
 const USAGE = `teamforge <command>
@@ -112,12 +125,13 @@ async function main() {
         project_name: opts.name || project.split('/').at(-1),
         title: opts.title || '',
       });
-      if (!('no-open' in opts)) openBrowser(BASE);
-      return print(out);
+      const opened = 'no-open' in opts ? false : await openBrowser(BASE);
+      return print({ ...out, dashboard: BASE, opened });
     }
-    case 'open':
-      openBrowser(BASE);
-      return print({ ok: true, url: BASE });
+    case 'open': {
+      const opened = await openBrowser(BASE);
+      return print({ ok: opened, url: BASE, opened });
+    }
     case 'state':
       return print(await activeSession());
     case 'phase': {

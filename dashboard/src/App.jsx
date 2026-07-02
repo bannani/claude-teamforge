@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTeamState } from './useTeamState.js';
 import { PhaseBar } from './components/PhaseBar.jsx';
-import { AgentGrid } from './components/AgentGrid.jsx';
+import { CrewRoom } from './components/CrewRoom.jsx';
 import { ValidationPanel } from './components/ValidationPanel.jsx';
 import { TaskBoard } from './components/TaskBoard.jsx';
 import { Timeline } from './components/Timeline.jsx';
@@ -48,8 +48,8 @@ export default function App() {
 
       <div className="grid-main">
         <section className="col">
-          <h2 className="section-title">The Team</h2>
-          <AgentGrid agents={agents} />
+          <h2 className="section-title">The Crew</h2>
+          <CrewRoom agents={agents} events={events} />
           <StatusStrip agents={agents} events={events} />
         </section>
         <section className="col">
