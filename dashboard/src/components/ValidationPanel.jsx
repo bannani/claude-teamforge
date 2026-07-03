@@ -2,11 +2,26 @@ import React, { useState } from 'react';
 
 export function ValidationPanel({ validations }) {
   const pending = validations.filter((v) => v.status === 'pending');
-  if (pending.length === 0) return null;
+
+  if (pending.length === 0) {
+    return (
+      <div className="panel validation-panel quiet">
+        <span className="v-idle-dot" />
+        <p>
+          No questions right now. When Claude needs your validation
+          (spec, plan, sign-off) it appears here — answer with one click.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="panel validation-panel">
-      <h3>✋ Waiting for you — answer here or in chat</h3>
+    <div className="panel validation-panel active">
+      <div className="validation-head">
+        <span className="v-ping" />
+        <h3>Claude is waiting for you</h3>
+        <span className="muted">answer here or in chat</span>
+      </div>
       {pending.map((v) => <ValidationItem key={v.id} v={v} />)}
     </div>
   );
@@ -25,7 +40,7 @@ function ValidationItem({ v }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ status, answer: answer.trim() || fallback }),
       });
-      // SSE snapshot removes this item once the worker records the answer.
+      // SSE snapshot clears this item once the worker records the answer.
     } catch {
       setBusy(false);
     }
@@ -33,16 +48,19 @@ function ValidationItem({ v }) {
 
   return (
     <div className="validation-item">
-      <span className="badge pending">{v.gate}</span>
+      <div className="validation-meta">
+        <span className="badge pending">{v.gate.replace('_', ' ')}</span>
+        <span className="muted">{v.ts?.slice(11, 16)}</span>
+      </div>
       <p className="validation-question">{v.question}</p>
-      <input
-        className="answer-input"
-        placeholder="Optional comment for Claude…"
-        value={answer}
-        disabled={busy}
-        onChange={(e) => setAnswer(e.target.value)}
-      />
-      <div className="validation-actions">
+      <div className="validation-controls">
+        <input
+          className="answer-input"
+          placeholder="Optional comment for Claude…"
+          value={answer}
+          disabled={busy}
+          onChange={(e) => setAnswer(e.target.value)}
+        />
         <button type="button" className="btn approve" disabled={busy} onClick={() => respond('approved')}>
           ✓ Approve
         </button>

@@ -5,32 +5,40 @@ const PHASES = [
   { id: 'brainstorm', label: 'Brainstorm' },
   { id: 'questions', label: 'Questions' },
   { id: 'spec', label: 'Spec' },
-  { id: 'spec_gate', label: 'Spec ✋', gate: true },
+  { id: 'spec_gate', label: 'Approval', gate: true },
   { id: 'plan', label: 'Plan' },
-  { id: 'plan_gate', label: 'Plan ✋', gate: true },
+  { id: 'plan_gate', label: 'Approval', gate: true },
   { id: 'implementation', label: 'Build' },
   { id: 'tests', label: 'Tests' },
   { id: 'review', label: 'Review' },
-  { id: 'done_gate', label: 'Sign-off ✋', gate: true },
+  { id: 'done_gate', label: 'Sign-off', gate: true },
   { id: 'done', label: 'Done' },
 ];
 
 export function PhaseBar({ phase }) {
-  const current = PHASES.findIndex((p) => p.id === phase);
-  const pct = current <= 0 ? 0 : (current / (PHASES.length - 1)) * 100;
+  const current = Math.max(0, PHASES.findIndex((p) => p.id === phase));
+  const meta = PHASES[current];
 
   return (
     <div className="panel phasebar">
-      <div className="phase-track">
-        <div className="phase-fill" style={{ width: `${pct}%` }} />
+      <div className="phase-info">
+        <div>
+          <span className="eyebrow">Current phase</span>
+          <h2 className="phase-current">
+            {meta.label}
+            {meta.gate && <span className="phase-gate-tag">waiting for your approval</span>}
+          </h2>
+        </div>
+        <span className="phase-count">{current + 1} <em>/ {PHASES.length}</em></span>
+      </div>
+      <div className="phase-seg-row">
         {PHASES.map((p, i) => (
           <div
-            key={p.id}
-            className={`phase-node ${p.gate ? 'gate' : ''} ${i < current ? 'past' : ''} ${i === current ? 'current' : ''}`}
-            style={{ left: `${(i / (PHASES.length - 1)) * 100}%` }}
+            key={p.id + i}
+            className={`phase-seg ${i < current ? 'past' : ''} ${i === current ? 'current' : ''} ${p.gate ? 'gate' : ''}`}
           >
-            <span className="dot">{p.gate ? '🔒' : ''}</span>
-            <span className="phase-label">{p.label}</span>
+            <div className="seg-bar">{p.gate ? (i < current ? '✓' : '🔒') : ''}</div>
+            <span className="seg-label">{p.label}</span>
           </div>
         ))}
       </div>
