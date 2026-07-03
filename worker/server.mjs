@@ -2,6 +2,7 @@
 // Zero runtime dependencies — node:http + node:sqlite.
 
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +10,9 @@ import { openDb, DEFAULT_DB_PATH } from './db.mjs';
 import { canTransition, gateAllowsWrite } from './state-machine.mjs';
 
 export const PORT = 4519;
-const DIST = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'dashboard', 'dist');
+const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
+const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+const DIST = join(ROOT, 'dashboard', 'dist');
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json',
@@ -53,7 +56,7 @@ export function createTeamforgeServer({ dbPath = DEFAULT_DB_PATH, distDir = DIST
     let m;
 
     if (req.method === 'GET' && pathname === '/api/health') {
-      return json(res, 200, { ok: true, version: '0.2.0' });
+      return json(res, 200, { ok: true, version: VERSION });
     }
 
     if (req.method === 'GET' && (m = pathname.match(/^\/api\/validations\/(\d+)$/))) {
@@ -141,7 +144,12 @@ export function createTeamforgeServer({ dbPath = DEFAULT_DB_PATH, distDir = DIST
     }
 
     if (req.method === 'PATCH' && (m = pathname.match(/^\/api\/validations\/(\d+)$/))) {
-      const validation = db.answerValidation(Number(m[1]), body.status, body.answer || '');
+      const result = db.answerValidation(Number(m[1]), body.status, body.answer || '');
+      if (result.error === 'not_found') return json(res, 404, { error: 'validation not found' });
+      if (result.error === 'already_answered') {
+        return json(res, 409, { error: 'validation already answered', validation: result.validation });
+      }
+      const { validation } = result;
       db.addEvent(validation.session_id, 'validation', { gate: validation.gate, status: body.status });
       broadcast();
       return json(res, 200, { validation });

@@ -117,6 +117,32 @@ test('validation can be fetched by id (dashboard answer flow)', async () => {
   assert.equal((await api('GET', '/api/validations/99999')).status, 404);
 });
 
+test('answering an unknown validation returns 404', async () => {
+  const r = await api('PATCH', '/api/validations/99999', { status: 'approved' });
+  assert.equal(r.status, 404);
+  assert.match(r.body.error, /not found/);
+});
+
+test('answering an already-answered validation returns 409 and keeps the first answer', async () => {
+  const v = await api('POST', `/api/sessions/${sid}/validations`, {
+    gate: 'done_gate', question: 'Double-click race?',
+  });
+  const id = v.body.validation.id;
+  await api('PATCH', `/api/validations/${id}`, { status: 'approved', answer: 'first' });
+  const second = await api('PATCH', `/api/validations/${id}`, { status: 'changes_requested', answer: 'second' });
+  assert.equal(second.status, 409);
+  assert.match(second.body.error, /already/);
+  const final = (await api('GET', `/api/validations/${id}`)).body.validation;
+  assert.equal(final.status, 'approved');
+  assert.equal(final.answer, 'first');
+});
+
+test('health reports the package version', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal((await api('GET', '/api/health')).body.version, pkg.version);
+});
+
 test('SSE stream sends snapshot on connect and on mutation', async () => {
   const res = await fetch(`${base}/events?project=/proj/todo`);
   const reader = res.body.getReader();

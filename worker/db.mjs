@@ -122,10 +122,13 @@ export function openDb(path = DEFAULT_DB_PATH) {
     },
 
     answerValidation(id, status, answer = '') {
+      const existing = db.prepare('SELECT * FROM validations WHERE id = ?').get(id);
+      if (!existing) return { error: 'not_found' };
+      if (existing.status !== 'pending') return { error: 'already_answered', validation: existing };
       db.prepare('UPDATE validations SET status = ?, answer = ? WHERE id = ?').run(status, answer, id);
       const v = db.prepare('SELECT * FROM validations WHERE id = ?').get(id);
       touch(v.session_id);
-      return v;
+      return { validation: v };
     },
 
     hasApprovedValidation(session_id, gate) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 // Among-Us-style crew room: each agent is a bean crewmate. Idle crew hang out
 // in the lounge; a working agent walks to its station (CSS position transition)
@@ -35,8 +35,32 @@ function Crewmate({ color }) {
   );
 }
 
+// Track which crew are mid-walk: when an agent's target position changes we
+// add a "walking" class for the duration of the CSS position transition.
+function useWalking(agents) {
+  const [walking, setWalking] = useState({});
+  const prev = useRef({});
+  const timers = useRef({});
+  useEffect(() => {
+    for (const a of agents) {
+      if (prev.current[a.role] !== undefined && prev.current[a.role] !== a.status) {
+        setWalking((w) => ({ ...w, [a.role]: true }));
+        clearTimeout(timers.current[a.role]);
+        timers.current[a.role] = setTimeout(() => {
+          setWalking((w) => ({ ...w, [a.role]: false }));
+        }, 2400);
+      }
+      prev.current[a.role] = a.status;
+    }
+  }, [agents]);
+  // Timers must survive re-renders (snapshots arrive mid-walk); clear only on unmount.
+  useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
+  return walking;
+}
+
 export function CrewRoom({ agents, events }) {
   const [selected, setSelected] = useState(null);
+  const walking = useWalking(agents);
   const selectedAgent = agents.find((a) => a.role === selected);
   const recent = selected
     ? events.filter((e) => e.kind === 'agent' && e.payload.role === selected).slice(0, 4)
@@ -45,6 +69,7 @@ export function CrewRoom({ agents, events }) {
   return (
     <div className="panel crew-panel">
       <div className="crew-room" onClick={() => setSelected(null)}>
+        <div className="room-horizon" />
         {Object.entries(CREW).map(([role, meta]) => (
           <div
             key={`station-${role}`}
@@ -55,11 +80,12 @@ export function CrewRoom({ agents, events }) {
         {agents.map((a) => {
           const meta = CREW[a.role] || { label: a.role, color: '#94a3b8', station: { x: 50, y: 50 } };
           const pos = a.status === 'working' ? meta.station : (LOUNGE[a.role] || { x: 50, y: 50 });
+          const depth = 0.88 + (pos.y / 100) * 0.24; // lower on screen = closer = bigger
           return (
             <div
               key={a.role}
-              className={`crew ${a.status} ${selected === a.role ? 'selected' : ''}`}
-              style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+              className={`crew ${a.status} ${walking[a.role] ? 'walking' : ''} ${selected === a.role ? 'selected' : ''}`}
+              style={{ left: `${pos.x}%`, top: `${pos.y}%`, zIndex: 2 + Math.round(pos.y), '--depth': depth }}
               onClick={(e) => { e.stopPropagation(); setSelected(selected === a.role ? null : a.role); }}
               title={`${meta.label} — ${a.status}`}
             >

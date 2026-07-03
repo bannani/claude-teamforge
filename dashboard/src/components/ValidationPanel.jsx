@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 
+const GATE_META = {
+  spec_gate: { icon: '📋', label: 'spec approval' },
+  plan_gate: { icon: '🗺️', label: 'plan approval' },
+  done_gate: { icon: '🏁', label: 'final sign-off' },
+};
+
 export function ValidationPanel({ validations }) {
   const pending = validations.filter((v) => v.status === 'pending');
+  const lastAnswered = [...validations].reverse().find((v) => v.status !== 'pending');
 
   if (pending.length === 0) {
     return (
@@ -11,6 +18,11 @@ export function ValidationPanel({ validations }) {
           No questions right now. When Claude needs your validation
           (spec, plan, sign-off) it appears here — answer with one click.
         </p>
+        {lastAnswered && (
+          <span className={`v-last badge ${lastAnswered.status}`}>
+            {GATE_META[lastAnswered.gate]?.icon} {lastAnswered.gate.replace('_', ' ')}: {lastAnswered.status.replace('_', ' ')}
+          </span>
+        )}
       </div>
     );
   }
@@ -30,6 +42,7 @@ export function ValidationPanel({ validations }) {
 function ValidationItem({ v }) {
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
+  const meta = GATE_META[v.gate] || { icon: '✋', label: v.gate };
 
   const respond = async (status) => {
     setBusy(true);
@@ -40,7 +53,8 @@ function ValidationItem({ v }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ status, answer: answer.trim() || fallback }),
       });
-      // SSE snapshot clears this item once the worker records the answer.
+      // 200 or 409 (already answered elsewhere): either way the SSE snapshot
+      // reconciles and clears this item, so stay in the busy state.
     } catch {
       setBusy(false);
     }
@@ -49,7 +63,8 @@ function ValidationItem({ v }) {
   return (
     <div className="validation-item">
       <div className="validation-meta">
-        <span className="badge pending">{v.gate.replace('_', ' ')}</span>
+        <span className="gate-icon">{meta.icon}</span>
+        <span className="badge pending">{meta.label}</span>
         <span className="muted">{v.ts?.slice(11, 16)}</span>
       </div>
       <p className="validation-question">{v.question}</p>
