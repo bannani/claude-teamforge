@@ -10,12 +10,12 @@ function freshDb() {
   return openDb(join(mkdtempSync(join(tmpdir(), 'tf-')), 'test.db'));
 }
 
-test('createSession seeds session in idea phase with 7 idle agents', () => {
+test('createSession seeds session in idea phase with one idle agent per role', () => {
   const db = freshDb();
   const s = db.createSession({ project_path: '/p/demo', project_name: 'Demo', title: 'Todo app' });
   assert.equal(s.phase, 'idea');
   const snap = db.snapshot(s.id);
-  assert.equal(snap.agents.length, 7);
+  assert.equal(snap.agents.length, ROLES.length);
   assert.deepEqual(snap.agents.map((a) => a.role).sort(), [...ROLES].sort());
   assert.ok(snap.agents.every((a) => a.status === 'idle'));
 });

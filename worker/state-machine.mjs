@@ -1,6 +1,8 @@
 // Pure workflow logic — no I/O. The single source of truth for phases, gates,
 // roles, and the write-lock rule enforced by the PreToolUse hook.
 
+import { ROLE_IDS } from './roles.mjs';
+
 export const PHASES = [
   'idea', 'brainstorm', 'questions', 'spec', 'spec_gate', 'plan', 'plan_gate',
   'implementation', 'tests', 'review', 'done_gate', 'done',
@@ -8,7 +10,7 @@ export const PHASES = [
 
 export const GATES = new Set(['spec_gate', 'plan_gate', 'done_gate']);
 
-export const ROLES = ['pm', 'architect', 'frontend', 'backend', 'qa', 'security', 'reviewer'];
+export const ROLES = ROLE_IDS;
 
 export function phaseIndex(phase) {
   return PHASES.indexOf(phase);

@@ -143,6 +143,17 @@ export function openDb(path = DEFAULT_DB_PATH) {
       ).all(project_path, limit);
     },
 
+    // Every current role, in company order. Sessions created before a role
+    // existed get an idle placeholder (written only when that role first reports).
+    roster(session_id) {
+      const rows = db.prepare('SELECT * FROM agents WHERE session_id = ?').all(session_id);
+      const byRole = new Map(rows.map((a) => [a.role, a]));
+      return [
+        ...ROLES.map((role) => byRole.get(role) || { session_id, role, status: 'idle', note: '' }),
+        ...rows.filter((a) => !ROLES.includes(a.role)),
+      ];
+    },
+
     snapshot(session_id) {
       const session = this.getSession(session_id);
       if (!session) return { empty: true };
@@ -154,7 +165,7 @@ export function openDb(path = DEFAULT_DB_PATH) {
       )];
       return {
         session,
-        agents: db.prepare('SELECT * FROM agents WHERE session_id = ? ORDER BY id').all(session_id),
+        agents: this.roster(session_id),
         tasks: db.prepare('SELECT * FROM tasks WHERE session_id = ? ORDER BY ord, id').all(session_id),
         validations: db.prepare('SELECT * FROM validations WHERE session_id = ? ORDER BY id').all(session_id),
         decisions: db.prepare('SELECT * FROM decisions WHERE session_id = ? ORDER BY id').all(session_id),

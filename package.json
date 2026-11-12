@@ -8,6 +8,9 @@
     "worker": "node worker/server.mjs"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22.13"
+  },
+  "bin": {
+    "teamforge": "worker/cli.mjs"
   }
 }

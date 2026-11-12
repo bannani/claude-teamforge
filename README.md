@@ -26,10 +26,20 @@ Claude Code session                        Worker (Node 24, zero deps)
 └─────────────────────────────┘            └────────────────────────────┘
 ```
 
-**The team** — 7 roles, each a dashboard card and an agent definition: Product
-Manager, Architect, Frontend, Backend, QA/Test, Security, Reviewer. PM and Architect
-run in the main session (they own the conversation with you); implementers and the
-Reviewer can be dispatched as real subagents. Every status change animates live.
+**The company** — 14 employees in 5 departments, each with a job description,
+a manager and the phases they work in (`worker/roles.mjs`):
+
+| Department | Employees |
+|---|---|
+| Direction | CEO |
+| Product | Product Manager · Business Analyst · UX/UI Designer |
+| Engineering | CTO · Frontend · Backend · Database · DevOps |
+| Quality | Tech Lead · QA · Security |
+| Delivery | Scrum Master · Technical Writer |
+
+The dashboard shows them three ways: the **office** (who is at their desk), the
+**org chart** (who reports to whom) and an **employee file** (mission,
+responsibilities, tasks, activity). Every status change animates live.
 
 **Memory** — approved decisions persist per project in SQLite and are injected into
 every future session's context.
@@ -67,6 +77,7 @@ only after both gates are approved.
 - `worker/` — state machine, SQLite layer, HTTP+SSE server, `teamforge` CLI, hook entrypoint
 - `hooks/` — hooks.json + bash shims (fail-open: a dead worker never blocks you)
 - `skills/teamforge/` — the workflow law injected at session start
-- `agents/` — the 7 role definitions
+- `agents/` — one job description per employee
+- `worker/roles.mjs` — the company: roles, departments, reporting line
 - `dashboard/` — React + Vite source; prebuilt `dist/` committed
 - `docs/` — spec, plan, install guide, demo scenario

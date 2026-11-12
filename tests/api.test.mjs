@@ -41,7 +41,7 @@ test('create session', async () => {
   sid = r.body.session.id;
   const state = await api('GET', '/api/state?project=/proj/todo');
   assert.equal(state.body.session.id, sid);
-  assert.equal(state.body.agents.length, 7);
+  assert.equal(state.body.agents.length, 14);
 });
 
 test('phase skip is rejected with 409', async () => {

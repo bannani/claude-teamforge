@@ -2,7 +2,7 @@ import React from 'react';
 import { useTeamState } from './useTeamState.js';
 import { useCelebration } from './useCelebration.js';
 import { PhaseBar } from './components/PhaseBar.jsx';
-import { CrewRoom } from './components/CrewRoom.jsx';
+import { Company } from './components/Company.jsx';
 import { ValidationPanel } from './components/ValidationPanel.jsx';
 import { TaskBoard } from './components/TaskBoard.jsx';
 import { Timeline } from './components/Timeline.jsx';
@@ -32,7 +32,7 @@ function Starfield() {
 }
 
 export default function App() {
-  const { state, connected } = useTeamState();
+  const { state, company, connected } = useTeamState();
   useCelebration(state);
 
   if (!state || state.empty) {
@@ -41,7 +41,7 @@ export default function App() {
         <Starfield />
         <div className="logo-orb" />
         <h1>TeamForge</h1>
-        <p>No active mission. Give Claude an idea and the team will assemble.</p>
+        <p>No active mission. Give the company an idea and the team will assemble.</p>
         <span className="hint-line">try: “build me a habit tracker”</span>
         <span className={`conn ${connected ? 'on' : 'off'}`}>
           {connected ? 'worker connected' : 'connecting…'}
@@ -52,6 +52,7 @@ export default function App() {
 
   const { session, agents, tasks, validations, decisions, events, files } = state;
   const working = agents.filter((a) => a.status === 'working').length;
+  const roleNames = Object.fromEntries(company.roles.map((r) => [r.id, r.short]));
 
   return (
     <div className="shell">
@@ -65,7 +66,7 @@ export default function App() {
         </div>
         <div className="topbar-right">
           <span className="phase-pill">{session.phase.replace('_', ' ')}</span>
-          {working > 0 && <span className="live-pill">⚡ {working} agent{working > 1 ? 's' : ''} working</span>}
+          {working > 0 && <span className="live-pill">⚡ {working} of {agents.length} at work</span>}
           <span className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'live' : 'reconnecting…'}</span>
         </div>
       </header>
@@ -75,13 +76,13 @@ export default function App() {
 
       <div className="grid-main">
         <section className="col">
-          <h2 className="section-title">The Crew</h2>
-          <CrewRoom agents={agents} events={events} />
+          <h2 className="section-title">The Company</h2>
+          <Company company={company} agents={agents} tasks={tasks} events={events} phase={session.phase} />
           <StatusStrip agents={agents} events={events} />
         </section>
         <section className="col">
           <h2 className="section-title">Mission</h2>
-          <TaskBoard tasks={tasks} />
+          <TaskBoard tasks={tasks} roleNames={roleNames} />
           <FilesPanel files={files} />
           <DecisionsPanel decisions={decisions} />
         </section>

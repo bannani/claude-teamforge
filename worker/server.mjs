@@ -8,6 +8,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openDb, DEFAULT_DB_PATH } from './db.mjs';
 import { canTransition, gateAllowsWrite } from './state-machine.mjs';
+import { DEPARTMENTS, ROLE_CATALOG } from './roles.mjs';
 
 export const PORT = 4519;
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -57,6 +58,10 @@ export function createTeamforgeServer({ dbPath = DEFAULT_DB_PATH, distDir = DIST
 
     if (req.method === 'GET' && pathname === '/api/health') {
       return json(res, 200, { ok: true, version: VERSION });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/roles') {
+      return json(res, 200, { departments: DEPARTMENTS, roles: ROLE_CATALOG });
     }
 
     if (req.method === 'GET' && (m = pathname.match(/^\/api\/validations\/(\d+)$/))) {

@@ -28,7 +28,7 @@ function ProgressRing({ pct }) {
   );
 }
 
-export function TaskBoard({ tasks }) {
+export function TaskBoard({ tasks, roleNames = {} }) {
   if (tasks.length === 0) {
     return <div className="panel"><h3>Tasks</h3><p className="muted">Tasks appear once the plan is validated.</p></div>;
   }
@@ -59,7 +59,7 @@ export function TaskBoard({ tasks }) {
               <li key={t.id} className={`task ${t.status}`}>
                 <span className={`badge ${t.status}`}>{t.status.replace('_', ' ')}</span>
                 <span className="task-title">{t.title}</span>
-                {t.role && <span className="role-chip">{t.role}</span>}
+                {t.role && <span className="role-chip">{roleNames[t.role] || t.role}</span>}
               </li>
             ))}
           </ul>

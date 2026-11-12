@@ -1,28 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { officeLayout } from '../company.js';
 
-// Among-Us-style crew room: each agent is a bean crewmate. Idle crew hang out
-// in the lounge; a working agent walks to its station (CSS position transition)
-// and types. Click a crewmate for details.
+// The office: each employee is a bean crewmate. Idle staff hang out in the
+// lounge; a working employee walks to their desk in their department's zone
+// (CSS position transition) and types. Click someone to open their file.
 
-const CREW = {
-  pm: { label: 'PM', color: '#8b7cf6', station: { x: 12, y: 24 } },
-  architect: { label: 'Architect', color: '#3b82f6', station: { x: 38, y: 20 } },
-  frontend: { label: 'Frontend', color: '#ec4899', station: { x: 64, y: 20 } },
-  backend: { label: 'Backend', color: '#22c55e', station: { x: 88, y: 26 } },
-  qa: { label: 'QA', color: '#eab308', station: { x: 14, y: 82 } },
-  security: { label: 'Security', color: '#ef4444', station: { x: 50, y: 88 } },
-  reviewer: { label: 'Reviewer', color: '#4fd8eb', station: { x: 86, y: 82 } },
-};
-
-const LOUNGE = {
-  pm: { x: 34, y: 50 }, architect: { x: 44, y: 44 }, frontend: { x: 54, y: 50 },
-  backend: { x: 64, y: 45 }, qa: { x: 39, y: 58 }, security: { x: 50, y: 62 },
-  reviewer: { x: 60, y: 57 },
-};
-
-function Crewmate({ color }) {
+export function Crewmate({ color }) {
   return (
-    <svg viewBox="0 0 100 120" className="crew-svg">
+    <svg viewBox="0 0 100 120" className="crew-svg" aria-hidden="true">
       <ellipse cx="56" cy="114" rx="28" ry="5" fill="rgba(0,0,0,0.35)" />
       <rect x="6" y="42" width="20" height="46" rx="10" fill={color} style={{ filter: 'brightness(0.7)' }} />
       <path
@@ -35,94 +20,79 @@ function Crewmate({ color }) {
   );
 }
 
-// Track which crew are mid-walk: when an agent's target position changes we
-// add a "walking" class for the duration of the CSS position transition.
-function useWalking(agents) {
+// Track who is mid-walk: when someone's status changes we add a "walking"
+// class for the duration of the CSS position transition.
+function useWalking(roster) {
   const [walking, setWalking] = useState({});
   const prev = useRef({});
   const timers = useRef({});
   useEffect(() => {
-    for (const a of agents) {
-      if (prev.current[a.role] !== undefined && prev.current[a.role] !== a.status) {
-        setWalking((w) => ({ ...w, [a.role]: true }));
-        clearTimeout(timers.current[a.role]);
-        timers.current[a.role] = setTimeout(() => {
-          setWalking((w) => ({ ...w, [a.role]: false }));
+    for (const a of roster) {
+      if (prev.current[a.id] !== undefined && prev.current[a.id] !== a.status) {
+        setWalking((w) => ({ ...w, [a.id]: true }));
+        clearTimeout(timers.current[a.id]);
+        timers.current[a.id] = setTimeout(() => {
+          setWalking((w) => ({ ...w, [a.id]: false }));
         }, 2400);
       }
-      prev.current[a.role] = a.status;
+      prev.current[a.id] = a.status;
     }
-  }, [agents]);
+  }, [roster]);
   // Timers must survive re-renders (snapshots arrive mid-walk); clear only on unmount.
   useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
   return walking;
 }
 
-export function CrewRoom({ agents, events }) {
-  const [selected, setSelected] = useState(null);
-  const walking = useWalking(agents);
-  const selectedAgent = agents.find((a) => a.role === selected);
-  const recent = selected
-    ? events.filter((e) => e.kind === 'agent' && e.payload.role === selected).slice(0, 4)
-    : [];
+export function CrewRoom({ roster, departments, selected, onSelect }) {
+  const walking = useWalking(roster);
+  const ids = roster.map((r) => `${r.id}:${r.department}`).join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { desks, zones, lounge } = useMemo(() => officeLayout(roster), [ids]);
+  const deptName = Object.fromEntries(departments.map((d) => [d.id, d.name]));
 
   return (
-    <div className="panel crew-panel">
-      <div className="crew-room" onClick={() => setSelected(null)}>
-        <div className="room-horizon" />
-        {Object.entries(CREW).map(([role, meta]) => (
-          <div
-            key={`station-${role}`}
-            className={`station ${agents.find((a) => a.role === role)?.status === 'working' ? 'lit' : ''}`}
-            style={{ left: `${meta.station.x}%`, top: `${meta.station.y - 13}%`, '--c': meta.color }}
-          />
-        ))}
-        {agents.map((a) => {
-          const meta = CREW[a.role] || { label: a.role, color: '#94a3b8', station: { x: 50, y: 50 } };
-          const pos = a.status === 'working' ? meta.station : (LOUNGE[a.role] || { x: 50, y: 50 });
-          const depth = 0.88 + (pos.y / 100) * 0.24; // lower on screen = closer = bigger
-          return (
-            <div
-              key={a.role}
-              className={`crew ${a.status} ${walking[a.role] ? 'walking' : ''} ${selected === a.role ? 'selected' : ''}`}
-              style={{ left: `${pos.x}%`, top: `${pos.y}%`, zIndex: 2 + Math.round(pos.y), '--depth': depth }}
-              onClick={(e) => { e.stopPropagation(); setSelected(selected === a.role ? null : a.role); }}
-              title={`${meta.label} — ${a.status}`}
-            >
-              {a.status === 'working' && (
-                <div className="bubble crew-bubble">
-                  {(a.note || 'on it').slice(0, 44)}
-                  <span className="typing"><i /><i /><i /></span>
-                </div>
-              )}
-              {a.status === 'blocked' && <span className="crew-alert">!</span>}
-              {a.status === 'done' && <span className="crew-check">✓</span>}
-              <Crewmate color={meta.color} />
-              <span className="crew-name" style={{ '--c': meta.color }}>{meta.label}</span>
-            </div>
-          );
-        })}
-        {selectedAgent && (
-          <div className="crew-popup panel" onClick={(e) => e.stopPropagation()}>
-            <div className="crew-popup-head">
-              <strong>{CREW[selected]?.label || selected}</strong>
-              <span className={`badge ${selectedAgent.status}`}>{selectedAgent.status}</span>
-              <button type="button" className="popup-close" onClick={() => setSelected(null)}>×</button>
-            </div>
-            <p className="crew-popup-note">{selectedAgent.note || 'Nothing to report.'}</p>
-            {recent.length > 0 && (
-              <ul className="crew-popup-log">
-                {recent.map((e) => (
-                  <li key={e.id}>
-                    <span className="muted">{e.ts?.slice(11, 19)}</span> {e.payload.status}
-                    {e.payload.note ? ` — ${e.payload.note}` : ''}
-                  </li>
-                ))}
-              </ul>
+    <div className="crew-room" onClick={() => onSelect(null)}>
+      <div className="room-horizon" />
+      {zones.map((z) => (
+        <span key={z.department} className="zone-label" style={{ left: `${z.x}%`, top: `${z.y}%` }}>
+          {deptName[z.department] || z.department}
+        </span>
+      ))}
+      {roster.map((r) => (
+        <div
+          key={`desk-${r.id}`}
+          className={`station ${r.status === 'working' ? 'lit' : ''}`}
+          style={{ left: `${desks[r.id].x}%`, top: `${desks[r.id].y - 13}%`, '--c': r.color }}
+        />
+      ))}
+      {roster.map((r) => {
+        const pos = r.status === 'working' ? desks[r.id] : lounge[r.id];
+        const depth = 0.86 + (pos.y / 100) * 0.2; // lower on screen = closer = bigger
+        const edge = pos.x < 22 ? 'edge-l' : pos.x > 78 ? 'edge-r' : '';
+        return (
+          <button
+            type="button"
+            key={r.id}
+            className={`crew ${r.status} ${edge} ${walking[r.id] ? 'walking' : ''} ${selected === r.id ? 'selected' : ''}`}
+            style={{ left: `${pos.x}%`, top: `${pos.y}%`, zIndex: 2 + Math.round(pos.y), '--depth': depth }}
+            onClick={(e) => { e.stopPropagation(); onSelect(selected === r.id ? null : r.id); }}
+            aria-pressed={selected === r.id}
+            aria-label={`${r.title} — ${r.status}${r.note ? `: ${r.note}` : ''}`}
+            title={`${r.title} — ${r.status}`}
+          >
+            {r.status === 'working' && (
+              <span className="bubble crew-bubble">
+                <span className="bubble-text">{r.note || 'on it'}</span>
+                <span className="typing"><i /><i /><i /></span>
+              </span>
             )}
-          </div>
-        )}
-      </div>
+            {r.status === 'blocked' && <span className="crew-alert">!</span>}
+            {r.status === 'done' && <span className="crew-check">✓</span>}
+            <Crewmate color={r.color} />
+            <span className="crew-name" style={{ '--c': r.color }}>{r.short}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
