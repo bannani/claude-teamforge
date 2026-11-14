@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node.js **≥ 24** (`node --version`) — the worker uses the built-in `node:sqlite`, no npm installs needed at runtime.
+- Node.js **≥ 22.13** (`node --version`) — the worker uses the built-in `node:sqlite`, no npm installs needed at runtime.
 - Claude Code with plugin support.
 
 ## Install
@@ -10,7 +10,7 @@
 In any Claude Code session:
 
 ```
-/plugin marketplace add /home/fares/claude-teamforge
+/plugin marketplace add bannani/claude-teamforge
 /plugin install claude-teamforge@teamforge-local
 /reload-plugins
 ```
@@ -28,7 +28,7 @@ Open the dashboard: **http://127.0.0.1:4519**
 | UserPromptSubmit / PostToolUse hooks | stream prompts and tool events to the timeline |
 | PreToolUse hook (Write\|Edit) | **denies source-file writes** while the workflow is pre-implementation |
 | `teamforge` skill | the phase pipeline Claude follows |
-| 7 agents | `teamforge-pm`, `-architect`, `-frontend`, `-backend`, `-qa`, `-security`, `-reviewer` |
+| 14 agents | one `teamforge-<role>` subagent per employee (`ceo`, `pm`, `analyst`, `designer`, `architect`, `frontend`, `backend`, `data`, `devops`, `reviewer`, `qa`, `security`, `scrum`, `writer`) |
 
 Data lives in `~/.claude-teamforge/teamforge.db`; worker log in `~/.claude-teamforge/worker.log`.
 
