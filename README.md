@@ -11,6 +11,8 @@ through a fixed idea-to-done pipeline. You watch every step on a live dashboard,
 Brainstorm → Questions → Spec → ✋ → Plan → ✋ → Implementation → Tests → Review → ✋ → Done
 ```
 
+![TeamForge dashboard: a mission going from idea to done, with the team working and the gates approved from the dashboard](docs/assets/teamforge-demo.gif)
+
 The ✋ are your validation gates. They are enforced, not suggested: a local worker owns
 the state machine and a `PreToolUse` hook **denies** `Write` and `Edit` on source files
 until both gates are approved.
