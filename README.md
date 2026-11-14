@@ -2,6 +2,12 @@
 
 **Turn Claude Code into a visible software team that can't skip steps.**
 
+[![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code/plugins)
+[![Tests](https://img.shields.io/badge/tests-45_passing-brightgreen)](tests/)
+[![Node](https://img.shields.io/badge/node-%E2%89%A5_22.13-339933?logo=node.js&logoColor=white)](package.json)
+[![Runtime deps](https://img.shields.io/badge/runtime_deps-0-blue)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
 TeamForge is a Claude Code plugin. When you ask Claude to build something, it runs a
 14-person virtual company — Product Manager, CTO, developers, QA, Security, Tech Lead —
 through a fixed idea-to-done pipeline. You watch every step on a live dashboard, and
@@ -16,6 +22,12 @@ Brainstorm → Questions → Spec → ✋ → Plan → ✋ → Implementation �
 The ✋ are your validation gates. They are enforced, not suggested: a local worker owns
 the state machine and a `PreToolUse` hook **denies** `Write` and `Edit` on source files
 until both gates are approved.
+
+## At a glance
+
+| 14 | 3 | 12 | 45 | 0 |
+|:---:|:---:|:---:|:---:|:---:|
+| AI employees in 5 departments | enforced validation gates | workflow phases | automated tests | runtime dependencies |
 
 ## Why
 
@@ -148,6 +160,23 @@ docs/            specs, plans, install guide, demo scenario
   [docs/specs/2026-11-12-standalone-webapp-design.md](docs/specs/2026-11-12-standalone-webapp-design.md)):
   a single `teamforge` command that opens a local app with a built-in agent console,
   usable outside Claude Code and with your own model provider.
+
+## Engineering highlights
+
+- **The model can't cheat the process.** Gates live in a separate worker process, not in the prompt. Claude can be told to skip steps; the `PreToolUse` hook still says no.
+- **Proven, not promised.** `tests/gate.test.mjs` drives the real bash hook shim end to end and checks that a source write is denied before the gates and allowed after.
+- **Zero runtime dependencies.** HTTP server, SSE streaming, SQLite storage and the CLI use only Node built-ins (`node:http`, `node:sqlite`), about 1,000 lines in `worker/`.
+- **Safe by default.** Hooks are fail-open: a crashed or missing worker never blocks your editor.
+- **Human-in-the-loop that feels instant.** `validate wait` blocks Claude until you click on the dashboard or answer in chat, whichever comes first.
+- **Real-time UI.** A React + Vite dashboard (11 components) fed by Server-Sent Events, with a live office, org chart and per-employee files.
+
+## Author
+
+Built by **Mohamed Fares Bannani**, Senior Software Engineer and AI Engineering Lead in Bordeaux. I design agentic development workflows and the tooling around them: agents, skills, hooks, plugins and MCP servers.
+
+[LinkedIn](https://www.linkedin.com/in/mohamed-fares-bannani-440881151) · [GitHub](https://github.com/bannani)
+
+If TeamForge is useful to you, a ⭐ on the repo helps a lot.
 
 ## Credits
 
