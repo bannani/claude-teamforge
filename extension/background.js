@@ -53,6 +53,28 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (origin !== message.url || !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) return;
   chrome.storage.local.set({ url: origin, token: message.token }).then(loop);
 });
+// A click on the extension's icon opens TeamForge — or goes back to its tab when
+// one is already open. If the worker does not answer, a page says how to start it.
+chrome.action.onClicked.addListener(async () => {
+  const { url } = await settings();
+  let up = false;
+  try { up = (await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1500) })).ok; } catch { /* not running */ }
+  if (!up) {
+    await setStatus('offline');
+    await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
+    return;
+  }
+  const { tabId: teamTabId } = await chrome.storage.session.get('tabId');
+  const open = (await chrome.tabs.query({ url: `${url}/*` })).find((t) => t.id !== teamTabId);
+  if (open) {
+    await chrome.tabs.update(open.id, { active: true });
+    await chrome.windows.update(open.windowId, { focused: true });
+  } else {
+    await chrome.tabs.create({ url: `${url}/` });
+  }
+  loop(); // opening the page pairs the extension if it was not
+});
+
 chrome.runtime.onInstalled.addListener(() => { chrome.alarms.create('wake', { periodInMinutes: 0.5 }); loop(); });
 chrome.runtime.onStartup.addListener(() => { chrome.alarms.create('wake', { periodInMinutes: 0.5 }); loop(); });
 chrome.alarms.onAlarm.addListener(loop);

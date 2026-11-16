@@ -1,6 +1,6 @@
 const TEXT = {
   connected: ['Connected', 'Your TeamForge company can act in this Chrome.'],
-  offline: ['Worker not running', 'Start TeamForge on this machine, then open its page.'],
+  offline: ['TeamForge is not running', 'Start it on this machine — run `teamforge` in your project folder — then click the extension again.'],
   unpaired: ['Not paired', 'Open the TeamForge page in this Chrome once: the extension pairs by itself.'],
 };
 chrome.storage.session.get({ status: 'unpaired' }).then(({ status }) => {
