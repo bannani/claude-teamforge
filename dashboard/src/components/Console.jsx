@@ -56,17 +56,19 @@ function SpikeAnswer({ text, streaming = false, expert }) {
 }
 
 // Spike mode: what the team read to answer, folded into one line.
-function Steps({ tools, who }) {
+function Steps({ tools, who, spike }) {
   const shown = tools.filter((m) => !isBookkeeping(m));
   if (!shown.length) return null;
   const busy = shown.findLast((m) => m.pending);
+  const failed = shown.filter((m) => !m.pending && !m.ok).length;
   const images = shown.flatMap((m) => m.images || []);
   return (
     <>
     <details className="con-steps">
       <summary>
         <span className="con-mark" aria-hidden="true">{busy ? '…' : '✓'}</span>
-        {busy ? 'Reading the code' : 'Read the code'} · {shown.length} step{shown.length > 1 ? 's' : ''}
+        {spike ? (busy ? 'Reading the code' : 'Read the code') : (busy ? 'Working' : 'Worked')} · {shown.length} step{shown.length > 1 ? 's' : ''}
+        {failed > 0 && !busy && <span className="con-tool-note">{failed} failed</span>}
         {busy && <span className="con-tool-arg">{busy.summary}</span>}
       </summary>
       {shown.map((m) => <ToolLine key={m.key} m={{ ...m, images: undefined }} grants={[]} who={who[m.agent]} canGrant={false} />)}
@@ -109,6 +111,25 @@ function Sessions({ chat, disabled }) {
     </details>
   );
 }
+
+// Copies an answer as text (in a spike: the functional part and its confidence).
+function Copy({ text }) {
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1500); } catch { /* clipboard refused */ }
+  };
+  return <button type="button" className="con-copy" onClick={copy} aria-label="Copy this answer">{done ? 'Copied' : 'Copy'}</button>;
+}
+const plain = (text, spike) => {
+  if (!spike) return text;
+  const { functional, confidence } = splitAnswer(text);
+  return confidence ? `${functional}\n\nConfidence: ${confidence.level}${confidence.reason ? ` — ${confidence.reason}` : ''}` : functional;
+};
+
+const EXAMPLES = {
+  build: ['Build a habit tracker with a weekly view', 'Add a dark mode to this app', 'Fix the failing tests and tell me what was wrong'],
+  spike: ['What happens when a user asks for a new password?', 'Who can delete an order, and under which conditions?', 'Which rules decide the price shown to a customer?'],
+};
 
 const MODES = [
   { id: 'build', label: 'Build', title: 'The company works on your mission' },
@@ -221,6 +242,12 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); complete(picked); return; }
       if (e.key === 'Escape') { e.preventDefault(); setText(''); return; }
     }
+    // ↑ in an empty field brings the last message back, to send again or correct
+    if (e.key === 'ArrowUp' && !text) {
+      const last = chat.messages.findLast((m) => m.role === 'user')?.text;
+      if (last) { e.preventDefault(); setText(last); }
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
   }
 
@@ -242,8 +269,11 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
 
   const model = chat.model === undefined ? workspace?.model : chat.model;
   const empty = chat.messages.length === 0 && !chat.draft;
-  const lastUser = chat.messages.findLastIndex((m) => m.role === 'user');
   const spike = chat.mode === 'spike';
+  const shown = groupSteps(chat.messages);
+  const lastUser = shown.findLastIndex((m) => m.role === 'user');
+  const ownChrome = chat.browserKind === 'own';
+  const example = (q) => { setText(q); inputRef.current?.focus(); };
 
   return (
     <section className="panel console" aria-label="Console">
@@ -261,17 +291,31 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
           ))}
         </div>
         {ready && <Sessions chat={chat} disabled={chat.running} />}
+        {ready && (
+          <button
+            type="button" className="con-new" disabled={chat.running || empty}
+            title="Close this conversation and start a fresh one in this tab" onClick={() => chat.send('/new')}
+          >
+            New
+          </button>
+        )}
         {workspace?.provider && (
           <span className="con-provider">{workspace.label}{model ? ` · ${model}` : ''}</span>
         )}
-        {chat.allowAll && <span className="con-open" title="/allow-all is on: the team can run any shell command from the implementation phase">all commands allowed</span>}
-        {chat.browser.length > 0 && (
-          <span className="con-web" title={`/browser: the team can act in ${chat.browserKind === 'own' ? 'your own Chrome' : 'a separate browser window'} on ${chat.browser.join(', ')}`}>
-            {chat.browserKind === 'own' ? 'your Chrome' : 'browser'} · {chat.browser.map((o) => o.replace(/^https?:\/\//, '')).join(', ')}
-          </span>
-        )}
-        {workspace?.project && <span className="con-project" title={workspace.project}>{workspace.project}</span>}
       </header>
+      <div className="con-sub">
+        {workspace?.project && <span className="con-project" title={workspace.project}>{`\u200e${workspace.project}`}</span>}
+        {chat.allowAll && <span className="con-open" title="/allow-all is on: the team can run any shell command from the implementation phase">all commands allowed</span>}
+        {chat.browser.length > 0 && (ownChrome && !chat.extension ? (
+          <span className="con-web off" title="The team may act in your Chrome, but the TeamForge extension is not connected. Load the extension folder in chrome://extensions (Developer mode → Load unpacked), then reload this page.">
+            extension not connected
+          </span>
+        ) : (
+          <span className="con-web" title={`/browser: the team can act in ${ownChrome ? 'your own Chrome' : 'a separate browser window'} on ${chat.browser.join(', ')}`}>
+            {ownChrome ? 'your Chrome' : 'browser'} · {chat.browser.map((o) => o.replace(/^https?:\/\//, '')).join(', ')}
+          </span>
+        ))}
+      </div>
 
       <div className="con-log" ref={logRef} onScroll={onScroll} role="log" aria-live="polite" tabIndex={0} aria-label="Conversation">
         {empty && (
@@ -279,18 +323,18 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
             {ready && spike ? (
               <>
                 <p>Ask how the product behaves today. The team reads the code — it cannot change anything — and answers in business terms. The technical detail is one click away under each answer.</p>
-                <p className="muted">Try: “What happens when a user asks for a new password?”</p>
+                <div className="con-chips">{EXAMPLES.spike.map((q) => <button key={q} type="button" className="con-chip" onClick={() => example(q)}>{q}</button>)}</div>
               </>
             ) : ready ? (
               <>
                 <p>Tell the company what to build. The team will ask its questions here and wait for your approval at each step.</p>
-                <p className="muted">Try: “Build a habit tracker with a weekly view”</p>
+                <div className="con-chips">{EXAMPLES.build.map((q) => <button key={q} type="button" className="con-chip" onClick={() => example(q)}>{q}</button>)}</div>
               </>
             ) : <p>{workspace ? workspace.reason : 'Connecting to the worker…'}</p>}
           </div>
         )}
-        {(spike ? groupSteps(chat.messages) : chat.messages).map((m, i) => {
-          if (m.role === 'steps') return <Steps key={m.key} tools={m.tools} who={roleNames} />;
+        {shown.map((m, i) => {
+          if (m.role === 'steps') return <Steps key={m.key} tools={m.tools} who={roleNames} spike={spike} />;
           if (isBookkeeping(m)) return null;
           if (m.role === 'tool') return <ToolLine key={m.key} m={m} grants={chat.grants} running={chat.running} current={i > lastUser} onAllow={chat.allow} who={roleNames[m.agent]} canGrant={!spike} />;
           if (m.role === 'error') return <p key={m.key} className="con-error" role="alert">{m.text}</p>;
@@ -305,10 +349,13 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
           return (
             <div key={m.key} id={`msg-${m.key}`} className={`con-msg ${m.role}`}>
               {/* a spike answer is the Business Analyst's */}
-              <span className="con-who">{m.role === 'user' ? 'You' : roleNames[m.agent] || (spike && roleNames.analyst) || 'Company'}</span>
-              {spike && m.role === 'assistant'
-                ? <SpikeAnswer text={m.text} expert={roleNames.architect} />
-                : <div className="con-text">{m.role === 'user' ? m.text : <Rich text={m.text} />}</div>}
+              <span className="con-who">
+                {m.role === 'user' ? 'You' : roleNames[m.agent] || (spike && roleNames.analyst) || 'Company'}
+                {m.role === 'assistant' && <Copy text={plain(m.text, spike)} />}
+              </span>
+              {m.role === 'user' ? <div className="con-text">{m.text}</div>
+                : spike ? <SpikeAnswer text={m.text} expert={roleNames.architect} />
+                  : <div className="con-text con-md"><Markdown source={m.text} /></div>}
               <Images images={m.images} />
             </div>
           );
@@ -318,7 +365,7 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
             <span className="con-who">{(spike && roleNames.analyst) || 'Company'}</span>
             {spike
               ? <SpikeAnswer text={chat.draft} streaming expert={roleNames.architect} />
-              : <div className="con-text"><Rich text={chat.draft} /><span className="con-caret" aria-hidden="true" /></div>}
+              : <div className="con-text con-md"><Markdown source={chat.draft} /><span className="con-caret" aria-hidden="true" /></div>}
           </div>
         )}
         {chat.running && !chat.draft && (

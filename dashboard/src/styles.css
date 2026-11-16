@@ -1102,3 +1102,32 @@ body { background-attachment: scroll; }
 .con-sessions-kind { font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9.5px; padding: 1px 7px; border-radius: 999px; color: var(--cyan); border: 1px solid rgba(89, 224, 242, 0.4); }
 .con-sessions-kind.spike { color: var(--violet); border-color: rgba(143, 127, 248, 0.45); }
 @media (pointer: coarse) { .con-sessions summary { min-height: 44px; display: flex; align-items: center; } }
+
+/* ================= console: header rows, examples, copy ================= */
+.con-head { flex-wrap: wrap; row-gap: 6px; }
+.con-head .con-provider { margin-left: auto; }
+.con-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; margin-top: -4px; }
+.con-sub .con-project { margin-left: 0; flex: 1 1 12ch; }
+.con-new {
+  font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; cursor: pointer;
+  padding: 5px 11px; border-radius: 999px; color: var(--muted); border: 1px solid var(--stroke-hi); background: rgba(5, 8, 14, 0.7);
+}
+.con-new:hover:not(:disabled) { color: var(--text); border-color: var(--cyan); }
+.con-new:disabled { opacity: 0.4; cursor: default; }
+.con-new:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.con-web.off { color: var(--amber); border-color: rgba(246, 185, 92, 0.5); background: rgba(246, 185, 92, 0.08); cursor: help; }
+.con-chips { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 4px; }
+.con-chip {
+  font: inherit; font-size: 12px; color: var(--text); cursor: pointer; text-align: center;
+  padding: 6px 13px; border-radius: 999px; border: 1px solid var(--stroke-hi); background: rgba(140, 166, 255, 0.06);
+}
+.con-chip:hover { border-color: var(--cyan); background: rgba(89, 224, 242, 0.08); }
+.con-chip:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.con-who { display: flex; align-items: center; gap: 8px; }
+.con-copy {
+  font: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+  padding: 1px 7px; border-radius: 999px; color: var(--muted); border: 1px solid transparent; background: none; opacity: 0;
+}
+.con-msg:hover .con-copy, .con-copy:focus-visible { opacity: 1; border-color: var(--stroke-hi); }
+.con-copy:hover { color: var(--cyan); border-color: var(--cyan); }
+@media (pointer: coarse) { .con-copy { opacity: 1; } .con-new, .con-chip { min-height: 44px; } }

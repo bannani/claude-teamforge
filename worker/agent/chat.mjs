@@ -68,7 +68,7 @@ export function createChat({
     emit(project, { type: 'system', text, command }, tab);
   }
   const sendPermissions = (project) => emit(project, {
-    type: 'permissions', grants: db.listGrants(project), allowAll: allowAll(project), browser: sitesOf(project), browserKind: browserKind(project),
+    type: 'permissions', grants: db.listGrants(project), allowAll: allowAll(project), browser: sitesOf(project), browserKind: browserKind(project), extension: extensionConnected(),
   });
 
   function sessionFor(project, text, tab) {
@@ -582,6 +582,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         allowAll: allowAll(project),
         browser: sitesOf(project),
         browserKind: browserKind(project),
+        extension: extensionConnected(),
         mode: modeOf(project, tab),
         model: modelFor(project),
         models: modelsOf(project),

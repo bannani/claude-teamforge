@@ -3,14 +3,14 @@ import { TAB } from './tab.js';
 
 // The conversation with the company: saved transcript + live chat events.
 
-const initial = { messages: [], draft: '', running: false, grants: [], allowAll: false, browser: [], browserKind: 'own', mode: 'build', model: undefined, models: { default: null, roles: {} }, notice: '' };
+const initial = { messages: [], draft: '', running: false, grants: [], allowAll: false, browser: [], browserKind: 'own', extension: true, mode: 'build', model: undefined, models: { default: null, roles: {} }, notice: '' };
 let localId = 0;
 const withKey = (m) => ({ key: m.id ? `m${m.id}` : `l${localId += 1}`, ...m });
 
 function reduce(state, action) {
   switch (action.type) {
     case 'loaded':
-      return { ...state, messages: action.messages.map(withKey), running: action.running, grants: action.grants, allowAll: action.allowAll, browser: action.browser || [], browserKind: action.browserKind || 'own', mode: action.mode || 'build', model: action.model, models: action.models || initial.models, draft: '' };
+      return { ...state, messages: action.messages.map(withKey), running: action.running, grants: action.grants, allowAll: action.allowAll, browser: action.browser || [], browserKind: action.browserKind || 'own', extension: action.extension !== false, mode: action.mode || 'build', model: action.model, models: action.models || initial.models, draft: '' };
     case 'system': // a line from TeamForge itself: command replies, notices
       return { ...state, notice: '', messages: [...state.messages, withKey({ role: 'system', text: action.text, command: action.command })] };
     case 'mode': // build ⇄ spike: each has its own conversation
@@ -18,7 +18,9 @@ function reduce(state, action) {
     case 'cleared':
       return { ...state, messages: [], draft: '', notice: '' };
     case 'permissions':
-      return { ...state, grants: action.grants, allowAll: action.allowAll, browser: action.browser || [], browserKind: action.browserKind || 'own' };
+      return { ...state, grants: action.grants, allowAll: action.allowAll, browser: action.browser || [], browserKind: action.browserKind || 'own', extension: action.extension !== false };
+    case 'extension': // is the TeamForge Chrome extension there?
+      return state.extension === action.connected ? state : { ...state, extension: action.connected };
     case 'models': // the company's model and each employee's own
       return { ...state, model: action.models.default, models: action.models };
     case 'notice':
@@ -68,9 +70,18 @@ export function useChat(project) {
     if (!project) return;
     fetch(`/api/chat?project=${encodeURIComponent(project)}&tab=${TAB}`)
       .then((r) => r.json())
-      .then((h) => dispatch({ type: 'loaded', messages: h.messages || [], running: !!h.running, grants: h.grants || [], allowAll: !!h.allowAll, browser: h.browser, browserKind: h.browserKind, mode: h.mode, model: h.model, models: h.models }))
+      .then((h) => dispatch({ type: 'loaded', messages: h.messages || [], running: !!h.running, grants: h.grants || [], allowAll: !!h.allowAll, browser: h.browser, browserKind: h.browserKind, extension: h.extension, mode: h.mode, model: h.model, models: h.models }))
       .catch(() => {});
   }, [project]);
+
+  // While the team may act in the client's Chrome, keep an eye on the extension.
+  const watchExtension = state.browser.length > 0 && state.browserKind === 'own';
+  useEffect(() => {
+    if (!watchExtension) return undefined;
+    const check = () => fetch('/api/bridge/status').then((r) => r.json()).then((s) => dispatch({ type: 'extension', connected: !!s.connected })).catch(() => {});
+    const timer = setInterval(check, 10000);
+    return () => clearInterval(timer);
+  }, [watchExtension]);
 
   const send = useCallback(async (text, images = []) => {
     try {

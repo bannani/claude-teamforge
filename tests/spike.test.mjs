@@ -73,6 +73,8 @@ test('groupSteps: runs of tool lines fold into one entry', () => {
   assert.deepEqual(grouped.map((m) => [m.role, m.tools?.map((x) => x.key)]), [
     ['user', undefined], ['steps', ['a', 'b']], ['assistant', undefined], ['steps', ['c']],
   ]);
+  const shown = groupSteps([t('a'), { ...t('nav'), action: { verb: 'opens', target: 'x' } }, { ...t('no'), denied: true, program: 'npm' }, { ...t('pic'), images: [{ file: '1/a.png' }] }, t('b')]);
+  assert.deepEqual(shown.map((m) => m.role === 'steps' ? m.tools.map((x) => x.key) : m.key), [['a'], 'nav', 'no', 'pic', ['b']], 'browser actions, refusals and screenshots stay in the open');
 });
 
 test('splitAnswer: tolerates the marker as models tend to decorate it', () => {

@@ -30,13 +30,17 @@ export function splitAnswer(text) {
   return { ...withConfidence(s), technical: null };
 }
 
-// A Product Owner does not need every file the team opened: runs of tool lines
-// become one { role: 'steps', tools } entry the console shows folded.
+// The client does not need every file the team opened: runs of tool lines become
+// one { role: 'steps', tools } entry the console shows folded. What they do need
+// stays in the open: what the team does in the browser, a screenshot, and a
+// command that was refused (it may carry an Allow button).
+const mustShow = (m) => !!m.action || m.images?.length > 0 || (m.denied && !m.pending);
+
 export function groupSteps(messages) {
   const out = [];
   for (const m of messages) {
     const last = out.at(-1);
-    if (m.role !== 'tool') out.push(m);
+    if (m.role !== 'tool' || mustShow(m)) out.push(m);
     else if (last?.role === 'steps') last.tools.push(m);
     else out.push({ role: 'steps', key: `steps-${m.key}`, tools: [m] });
   }

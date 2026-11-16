@@ -89,6 +89,14 @@ fourth refill?”. The CTO reads the code, the Business Analyst answers:
 Both parts come from one reading of the code, so opening the details costs nothing
 more. Answers are in the language of your question.
 
+**The console** — answers are formatted (lists, tables, code). What the team ran to
+get there is folded into one line, “Worked · 6 steps”, that you can open; what it does
+in the browser, its screenshots and a refused command stay in the open. **Sessions**
+brings another conversation back, **New** starts a fresh one in the tab, the examples
+of an empty console fill the input, ↑ in an empty input recalls your last message,
+and **Copy** appears on an answer when you point at it. Under the header: the project,
+what you allowed, and whether the TeamForge extension is connected.
+
 **Console commands** — a line starting with `/` is for TeamForge, not for the agent
 (type `/` to get the list):
 
