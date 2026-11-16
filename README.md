@@ -227,8 +227,10 @@ a new tab starts with an empty conversation, its own mission (or spike) and its 
 mode, while the tab you came from keeps its work. Reloading a tab stays in its
 session. The team works on one tab's request at a time per project: another tab is
 told to wait. What you allowed (`/allow`, `/browser`, models) is shared by the
-project's tabs. A tab you close for good takes its session out of reach — the data
-stays in the database, but no tab shows it any more.
+project's tabs. **Sessions**, in the console header, lists the project's open
+conversations: click one and it moves to the tab you are in — that is how you get
+back to a mission after closing its tab. What the tab was showing is set aside, and
+stays in the list.
 
 **Memory** — decisions you approve are kept per project in SQLite and given to
 the company at the start of every later mission.

@@ -86,6 +86,19 @@ export function openDb(path = DEFAULT_DB_PATH) {
       ).get(project_path, tab, kindFor(project_path, tab));
     },
 
+    // The open sessions of a project, whatever tab they belong to: the most recent first.
+    listSessions(project_path, limit = 30) {
+      return db.prepare(`SELECT s.id, s.title, s.kind, s.phase, s.tab, s.updated_at,
+          (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id AND m.role = 'user') AS questions
+        FROM sessions s WHERE s.project_path = ? AND s.phase != 'done' ORDER BY s.updated_at DESC, s.id DESC LIMIT ?`)
+        .all(project_path, limit);
+    },
+
+    setSessionTab(id, tab) {
+      db.prepare('UPDATE sessions SET tab = ? WHERE id = ?').run(String(tab || ''), id);
+      return this.getSession(id);
+    },
+
     getLatestSessionFor(project_path, tab = '') {
       return db.prepare('SELECT * FROM sessions WHERE project_path = ? AND tab = ? AND kind = ? ORDER BY id DESC LIMIT 1')
         .get(project_path, tab, kindFor(project_path, tab));

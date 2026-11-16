@@ -195,6 +195,14 @@ export function createTeamforgeServer({
       return json(res, 200, { decisions });
     }
 
+    if (req.method === 'GET' && pathname === '/api/sessions') {
+      return json(res, 200, { sessions: chat.sessions(url.searchParams.get('project') || '', tabOf(url.searchParams.get('tab'))) });
+    }
+
+    if (req.method === 'POST' && (m = pathname.match(/^\/api\/sessions\/(\d+)\/adopt$/))) {
+      return json(res, 200, chat.adopt(body.project_path, Number(m[1]), tabOf(body.tab)));
+    }
+
     if (req.method === 'POST' && pathname === '/api/sessions') {
       if (!body.project_path) return json(res, 400, { error: 'project_path required' });
       const session = db.createSession(body);

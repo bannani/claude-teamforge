@@ -112,5 +112,25 @@ export function useChat(project) {
     }
   }, [project]);
 
-  return { ...state, onChat: dispatch, send, stop, allow, setModel };
+  // The project's open sessions, and taking one back into this tab.
+  const listSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sessions?project=${encodeURIComponent(project)}&tab=${TAB}`);
+      return res.ok ? (await res.json()).sessions || [] : [];
+    } catch { return []; }
+  }, [project]);
+
+  const openSession = useCallback(async (id) => {
+    try {
+      const res = await post(`/api/sessions/${id}/adopt`, { project_path: project, tab: TAB });
+      if (res.ok) return true;
+      const body = await res.json().catch(() => ({}));
+      dispatch({ type: 'notice', text: body.error || 'Could not open that session.' });
+    } catch {
+      dispatch({ type: 'notice', text: 'The worker is not reachable.' });
+    }
+    return false;
+  }, [project]);
+
+  return { ...state, onChat: dispatch, send, stop, allow, setModel, listSessions, openSession };
 }

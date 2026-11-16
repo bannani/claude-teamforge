@@ -1073,3 +1073,32 @@ body { background-attachment: scroll; }
 /* the header holds more pills now: let them wrap instead of crushing one another */
 .con-head { flex-wrap: wrap; row-gap: 6px; }
 .con-web { flex-shrink: 0; max-width: 34ch; }
+
+/* ================= sessions menu ================= */
+.con-sessions { position: relative; flex-shrink: 0; }
+.con-sessions summary {
+  list-style: none; cursor: pointer; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;
+  padding: 5px 11px; border-radius: 999px; color: var(--muted); border: 1px solid var(--stroke-hi); background: rgba(5, 8, 14, 0.7);
+}
+.con-sessions summary::-webkit-details-marker { display: none; }
+.con-sessions summary:hover, .con-sessions[open] summary { color: var(--text); border-color: var(--cyan); }
+.con-sessions summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.con-sessions-list {
+  position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: min(360px, 80vw); max-height: 320px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 12px;
+  background: rgb(13, 18, 31); border: 1px solid var(--stroke-hi); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+.con-sessions-list p { padding: 6px 8px; font-size: 12px; line-height: 1.5; }
+.con-sessions-list button {
+  display: flex; flex-direction: column; gap: 3px; text-align: left; font: inherit; color: var(--text); cursor: pointer;
+  padding: 8px 10px; border-radius: 9px; border: 1px solid transparent; background: none;
+}
+.con-sessions-list button:hover:not(:disabled) { background: rgba(89, 224, 242, 0.08); border-color: rgba(89, 224, 242, 0.3); }
+.con-sessions-list button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 0; }
+.con-sessions-list button:disabled { cursor: default; opacity: 0.6; }
+.con-sessions-list button.here { opacity: 1; border-color: var(--stroke-hi); }
+.con-sessions-title { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.con-sessions-meta { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--muted); }
+.con-sessions-kind { font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9.5px; padding: 1px 7px; border-radius: 999px; color: var(--cyan); border: 1px solid rgba(89, 224, 242, 0.4); }
+.con-sessions-kind.spike { color: var(--violet); border-color: rgba(143, 127, 248, 0.45); }
+@media (pointer: coarse) { .con-sessions summary { min-height: 44px; display: flex; align-items: center; } }

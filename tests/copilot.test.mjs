@@ -114,6 +114,9 @@ Builtin servers:
   assert.equal(ISOLATED_ENV.COPILOT_PLUGIN_DIR_ONLY, 'true');
   const args = buildArgs({ prompt: 'p', sessionId: 's', writeOpen: false, browser: '@/x.json', otherMcp: ['jenkins', 'browser', 'bad name;rm'] });
   assert.ok(args.includes('--disable-builtin-mcps'));
+  const excluded = args.slice(args.indexOf('--excluded-tools') + 1, args.indexOf('--disable-builtin-mcps'));
+  assert.ok(excluded.includes('web_fetch') && excluded.includes('sql'));
+  assert.ok(!excluded.some((t) => ['bash', 'view', 'create', 'edit', 'grep', 'glob', 'task'].includes(t)), 'the tools the team works with stay');
   const off = args.flatMap((a, i) => (a === '--disable-mcp-server' ? [args[i + 1]] : []));
   assert.deepEqual(off, ['jenkins'], 'never the team\'s own browser server, never a name that is not one');
   assert.equal(args.at(-allowedCount(args) - 1), '--allow-tool');

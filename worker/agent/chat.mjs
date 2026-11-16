@@ -536,6 +536,38 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
       broadcast();
     },
 
+    // The open sessions of the project, for a tab that wants one back.
+    sessions(project, tab = '') {
+      requireProject(project);
+      const running = turns.get(project)?.tab;
+      return db.listSessions(project).filter((s) => s.questions > 0).map(({ tab: owner, ...s }) => ({
+        ...s, here: owner === tab, working: running !== undefined && owner === running,
+      }));
+    },
+
+    // A tab takes a session over: it leaves whatever tab had it, and the session this
+    // tab was showing is set aside (still in the list).
+    adopt(project, sessionId, tab = '') {
+      requireProject(project);
+      const session = db.getSession(Number(sessionId));
+      if (!session || session.project_path !== project || session.phase === 'done') throw new ChatError(404, 'no such open session in this project');
+      const turn = turns.get(project);
+      if (turn && (turn.tab === session.tab || turn.tab === tab)) throw new ChatError(409, 'the team is working in that session — wait for it or stop it first');
+      const mode = session.kind === 'spike' ? 'spike' : 'build';
+      const from = session.tab;
+      if (from !== tab) {
+        db.setMode(project, tab, mode);
+        const shown = db.getActiveSession(project, tab);
+        if (shown) db.setSessionTab(shown.id, `aside-${shown.id}`);
+        db.setSessionTab(session.id, tab);
+        emit(project, { type: 'cleared' }, from); // the tab that had it now starts fresh
+      }
+      edited.delete(project);
+      emit(project, { type: 'mode', mode, messages: db.listMessages(session.id) }, tab);
+      broadcast();
+      return { id: session.id, mode };
+    },
+
     model: modelFor,
     models: modelsOf,
     setModel,

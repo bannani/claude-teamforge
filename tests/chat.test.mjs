@@ -278,3 +278,44 @@ test('one turn at a time per project: a second tab is told the team is busy else
   release();
   for (let i = 0; i < 200 && (await view('tabA')).running; i += 1) await new Promise((r) => { setTimeout(r, 10); });
 });
+
+test('a tab can take back a session from the list: the conversation moves to it', async () => {
+  const p = project();
+  const view = async (tab) => (await api('GET', `/api/chat?project=${encodeURIComponent(p)}&tab=${tab}`)).body;
+  const settle = async (tab) => { for (let i = 0; i < 200; i += 1) { const h = await view(tab); if (!h.running) return h; await new Promise((r) => { setTimeout(r, 10); }); } throw new Error('turn never finished'); };
+  const list = async (tab) => (await api('GET', `/api/sessions?project=${encodeURIComponent(p)}&tab=${tab}`)).body.sessions;
+
+  script = say('Old answer.');
+  await api('POST', '/api/chat', { project_path: p, tab: 'closedTab', text: 'the idea I lost' });
+  await settle('closedTab');
+  await api('POST', '/api/chat', { project_path: p, tab: 'closedTab', text: '/spike' });
+  await api('POST', '/api/chat', { project_path: p, tab: 'closedTab', text: 'how does login work?' });
+  await settle('closedTab');
+  script = say('New answer.');
+  await api('POST', '/api/chat', { project_path: p, tab: 'newTab', text: 'something else' });
+  await settle('newTab');
+
+  const sessions = await list('newTab');
+  assert.deepEqual(sessions.map((s) => [s.title, s.kind, s.here]), [
+    ['something else', 'mission', true], ['how does login work?', 'spike', false], ['the idea I lost', 'mission', false],
+  ]);
+  assert.equal(sessions[0].questions, 1);
+
+  const lost = sessions.find((s) => s.title === 'the idea I lost');
+  const adopted = await api('POST', `/api/sessions/${lost.id}/adopt`, { project_path: p, tab: 'newTab' });
+  assert.deepEqual(adopted.body, { id: lost.id, mode: 'build' });
+  assert.deepEqual((await view('newTab')).messages.map((m) => m.text).slice(0, 2), ['the idea I lost', 'Old answer.']);
+  assert.ok((await list('newTab')).some((s) => s.title === 'something else' && !s.here), 'what the tab was showing is set aside, not lost');
+
+  const spike = sessions.find((s) => s.kind === 'spike');
+  await api('POST', `/api/sessions/${spike.id}/adopt`, { project_path: p, tab: 'newTab' });
+  const now = await view('newTab');
+  assert.equal(now.mode, 'spike', 'the tab takes the session\'s mode');
+  assert.ok(now.messages.some((m) => m.text === 'how does login work?'));
+
+  script = say('Carrying on.');
+  await api('POST', '/api/chat', { project_path: p, tab: 'newTab', text: 'and logout?' });
+  await settle('newTab');
+  assert.doesNotMatch(runs.at(-1).args[1], /spike mode$|You are TeamForge's analysis desk/, 'the agent conversation is resumed, not started again');
+  assert.equal((await api('POST', '/api/sessions/999999/adopt', { project_path: p, tab: 'newTab' })).status, 404);
+});

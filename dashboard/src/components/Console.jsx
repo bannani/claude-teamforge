@@ -77,6 +77,39 @@ function Steps({ tools, who }) {
   );
 }
 
+// The project's other conversations: a new tab starts fresh, this brings one back.
+function Sessions({ chat, disabled }) {
+  const [list, setList] = useState(null);
+  const ref = useRef(null);
+  const close = () => { if (ref.current) ref.current.open = false; };
+  return (
+    <details
+      className="con-sessions" ref={ref}
+      onToggle={(e) => { if (e.currentTarget.open) { setList(null); chat.listSessions().then(setList); } }}
+    >
+      <summary title="Go back to another conversation of this project">Sessions</summary>
+      <div className="con-sessions-list" role="menu">
+        {list === null && <p className="muted">Loading…</p>}
+        {list?.length === 0 && <p className="muted">No other conversation yet. Every new tab starts a fresh one.</p>}
+        {list?.map((s) => (
+          <button
+            key={s.id} type="button" role="menuitem" className={s.here ? 'here' : ''}
+            disabled={disabled || s.here || s.working}
+            onClick={async () => { if (await chat.openSession(s.id)) close(); }}
+          >
+            <span className="con-sessions-title">{s.title || 'Untitled'}</span>
+            <span className="con-sessions-meta">
+              <span className={`con-sessions-kind ${s.kind}`}>{s.kind === 'spike' ? 'spike' : s.phase.replace('_', ' ')}</span>
+              {s.questions} message{s.questions > 1 ? 's' : ''}
+              {s.here ? ' · this tab' : s.working ? ' · the team is working in it' : ''}
+            </span>
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 const MODES = [
   { id: 'build', label: 'Build', title: 'The company works on your mission' },
   { id: 'spike', label: 'Spike', title: 'Ask how the product behaves today — read-only' },
@@ -227,6 +260,7 @@ export function Console({ chat, workspace, hasMission, roleNames = {} }) {
             </button>
           ))}
         </div>
+        {ready && <Sessions chat={chat} disabled={chat.running} />}
         {workspace?.provider && (
           <span className="con-provider">{workspace.label}{model ? ` · ${model}` : ''}</span>
         )}

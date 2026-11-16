@@ -47,6 +47,7 @@ export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, gran
     ...(model ? ['--model', model] : []),
     // The user's own MCP servers are of no use here — their tools are not allowed — but each
     // one costs start-up time and prompt tokens on every turn (see ISOLATED_ENV).
+    '--excluded-tools', ...EXCLUDED_TOOLS,
     '--disable-builtin-mcps', ...otherMcp.filter(isServerName).flatMap((name) => ['--disable-mcp-server', name]),
     ...attachments.flatMap((path) => ['--attachment', path]),
     // directories whose .github/agents Copilot loads: agents TeamForge keeps outside the project
@@ -64,6 +65,17 @@ const isServerName = (s) => typeof s === 'string' && /^[\w.-]{1,64}$/.test(s) &&
 // turn — measured on a one-word turn: 8.5 s and 34k input tokens with it, 4.4 s and
 // 24k without. So plugins are not discovered, and the MCP servers are switched off.
 export const ISOLATED_ENV = { COPILOT_PLUGIN_DIR_ONLY: 'true' };
+
+// Built-in tools the company has no use for: the web (no URL is allowed anyway),
+// Copilot's own documentation, skills and workflows (they came from the plugins),
+// its session database, MCP resources, writing agent definitions. Their descriptions
+// alone were 10k of the 24k input tokens of every turn (13.4k without them).
+// Kept: bash (and its read/stop/list), view, create, edit, grep, glob,
+// semantic_code_search, task, read_agent, list_agents.
+export const EXCLUDED_TOOLS = [
+  'web_fetch', 'fetch_copilot_cli_documentation', 'skill', 'run_dynamic_workflow',
+  'dynamic_workflows_manage', 'sql', 'session_store_sql', 'write_agent', 'read_resource',
+];
 
 // The MCP servers Copilot would start: `copilot mcp list` prints "  name (type)" under
 // a heading per source. Plugin servers go with the plugins; the others are named here.
