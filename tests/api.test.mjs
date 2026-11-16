@@ -137,6 +137,23 @@ test('answering an already-answered validation returns 409 and keeps the first a
   assert.equal(final.answer, 'first');
 });
 
+test('closing a mission sends everyone still working back to idle', async () => {
+  const { session } = (await api('POST', '/api/sessions', { project_path: '/proj/closing' })).body;
+  await api('POST', `/api/sessions/${session.id}/agents`, { role: 'ceo', status: 'working', note: 'presenting' });
+  await api('POST', `/api/sessions/${session.id}/agents`, { role: 'qa', status: 'done', note: '12 passed' });
+  for (const phase of ['brainstorm', 'questions', 'spec', 'spec_gate', 'plan', 'plan_gate', 'implementation', 'tests', 'review', 'done_gate', 'done']) {
+    if (phase === 'plan' || phase === 'implementation' || phase === 'done') {
+      const gate = { plan: 'spec_gate', implementation: 'plan_gate', done: 'done_gate' }[phase];
+      const { validation } = (await api('POST', `/api/sessions/${session.id}/validations`, { gate, question: 'ok?' })).body;
+      await api('PATCH', `/api/validations/${validation.id}`, { status: 'approved' });
+    }
+    assert.equal((await api('POST', `/api/sessions/${session.id}/phase`, { phase })).status, 200, phase);
+  }
+  const { agents } = (await api('GET', '/api/state?project=/proj/closing')).body;
+  assert.equal(agents.find((a) => a.role === 'ceo').status, 'idle');
+  assert.equal(agents.find((a) => a.role === 'qa').status, 'done', 'a finished report is kept');
+});
+
 test('health reports the package version', async () => {
   const { readFile } = await import('node:fs/promises');
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));

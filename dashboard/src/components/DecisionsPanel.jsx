@@ -1,11 +1,11 @@
 import React from 'react';
+import { Collapsible } from './Collapsible.jsx';
 
 const STATUS_ICON = { approved: '✓', rejected: '✕', proposed: '…' };
 
 export function DecisionsPanel({ decisions }) {
   return (
-    <div className="panel">
-      <h3>Decisions</h3>
+    <Collapsible title="Decisions" count={decisions.length}>
       {decisions.length === 0 ? (
         <p className="muted decisions-empty">
           Key technical choices land here and become permanent project memory once approved.
@@ -24,6 +24,6 @@ export function DecisionsPanel({ decisions }) {
           ))}
         </ul>
       )}
-    </div>
+    </Collapsible>
   );
 }

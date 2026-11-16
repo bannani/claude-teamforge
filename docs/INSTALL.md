@@ -1,54 +1,49 @@
-# Installing Claude TeamForge
+# Installing TeamForge
 
 ## Requirements
 
-- Node.js **≥ 24** (`node --version`) — the worker uses the built-in `node:sqlite`, no npm installs needed at runtime.
-- Claude Code with plugin support.
+- Node.js **≥ 22.13** (`node --version`). The worker uses the built-in `node:sqlite`; nothing to install at runtime.
+- **GitHub Copilot CLI**, signed in: run `copilot` once in a terminal and complete the login. TeamForge drives that CLI; it never reads its credentials.
 
 ## Install
 
-In any Claude Code session:
-
 ```
-/plugin marketplace add /home/fares/claude-teamforge
-/plugin install claude-teamforge@teamforge-local
-/reload-plugins
+git clone https://github.com/bannani/claude-teamforge
+cd claude-teamforge
+npm link
 ```
 
-Then start a **new session** (or `/clear`) so the SessionStart hook fires: it boots the
-worker and injects the TeamForge workflow instructions.
+`npm link` puts the `teamforge` command on your PATH. Without it, use
+`node /path/to/claude-teamforge/worker/cli.mjs` wherever this guide says `teamforge`.
 
-Open the dashboard: **http://127.0.0.1:4519**
+## Use
 
-## What gets installed
+```
+cd /path/to/your/project
+teamforge
+```
 
-| Piece | Effect |
+This starts the worker (if needed) and opens `http://127.0.0.1:4519/?project=<that folder>`.
+Type what you want built in the console. After an upgrade, `teamforge` replaces the
+old worker by itself.
+
+## Configuration
+
+| Variable | Effect |
 |---|---|
-| SessionStart hook | starts worker, injects workflow law + past project decisions |
-| UserPromptSubmit / PostToolUse hooks | stream prompts and tool events to the timeline |
-| PreToolUse hook (Write\|Edit) | **denies source-file writes** while the workflow is pre-implementation |
-| `teamforge` skill | the phase pipeline Claude follows |
-| 7 agents | `teamforge-pm`, `-architect`, `-frontend`, `-backend`, `-qa`, `-security`, `-reviewer` |
+| `TEAMFORGE_MODEL` | model passed to Copilot (`--model`), e.g. set before the worker starts |
+| `TEAMFORGE_URL` | worker address for the CLI (default `http://127.0.0.1:4519`) |
 
-Data lives in `~/.claude-teamforge/teamforge.db`; worker log in `~/.claude-teamforge/worker.log`.
+## Where things live
 
-## Updating
-
-After editing the plugin source: rebuild the dashboard if it changed
-(`cd dashboard && npm install && npm run build`), then `/reload-plugins` and restart the
-worker: `pkill -f 'worker/server.mjs'` (the next session restarts it).
-
-## Uninstall
-
-```
-/plugin uninstall claude-teamforge@teamforge-local
-```
-
-Then optionally `rm -rf ~/.claude-teamforge` and `pkill -f 'worker/server.mjs'`.
+| Path | Content |
+|---|---|
+| `~/.claude-teamforge/teamforge.db` | missions, conversation, decisions, allowed programs |
+| `~/.claude-teamforge/worker.token` | API token (mode 600) |
+| `~/.claude-teamforge/worker.log` | worker output |
 
 ## Troubleshooting
 
-- **Dashboard empty** — no mission started yet; give Claude a build request.
-- **Port 4519 busy** — something else owns the port; stop it or edit `PORT` in `worker/server.mjs` (and the URLs in `worker/cli.mjs`, `worker/hook.mjs`, `dashboard/vite.config.js`).
-- **Writes blocked unexpectedly** — a stale active session is holding the gate. `node worker/cli.mjs state` to inspect; advance it or approve its gates. The hook is fail-open: if the worker is down, nothing is ever blocked.
-- **Hooks silent** — check `~/.claude-teamforge/worker.log` and that `node` is on PATH for GUI-launched apps.
+- **"No model provider found"** — the `copilot` command is not on the PATH the worker started with. Install it, then stop the worker (`kill $(cat ~/.claude-teamforge/worker.pid)`) and run `teamforge` again.
+- **The agent says a write or a command was denied** — before the plan is approved that is the workflow. From implementation on, click **Allow** next to the refused command.
+- **Each turn takes ~10 s to start** — Copilot loads its own plugins and MCP servers at every start.

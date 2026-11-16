@@ -1,10 +1,53 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Crewmate } from './CrewRoom.jsx';
 
 // One employee's file: job description (from the role catalog) + what they
 // are doing right now (tasks, status, recent activity).
 
-export function EmployeeFile({ person, roster, departments, phase, tasks, events, onSelect, onClose }) {
+// Model names seen working with Copilot; any other name can be typed.
+const MODEL_HINTS = ['claude-sonnet-5.5', 'gpt-5.6-sol', 'auto'];
+
+// Which model this employee runs on. The CEO is the main agent, so their model
+// is the company's; anyone else with a model of their own works as a sub-agent.
+function ModelPicker({ person, models, onSetModel }) {
+  const isCeo = person.id === 'ceo';
+  const own = isCeo ? models.default : models.roles[person.id];
+  const [value, setValue] = useState(own || '');
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setValue(own || ''); setProblem(''); }, [person.id, own]);
+  const inherited = isCeo ? 'Copilot\'s default' : models.default || 'Copilot\'s default';
+
+  async function apply(next) {
+    setBusy(true);
+    setProblem(await onSetModel(isCeo ? null : person.id, next || null));
+    setBusy(false);
+  }
+
+  return (
+    <form className="model-picker" onSubmit={(e) => { e.preventDefault(); apply(value.trim()); }}>
+      <label className="file-label" htmlFor={`model-${person.id}`}>Model</label>
+      <div className="model-row">
+        <input
+          id={`model-${person.id}`} list="model-hints" value={value} disabled={busy} spellCheck="false"
+          placeholder={isCeo ? `${inherited} — the whole company` : `Same as the company (${inherited})`}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <datalist id="model-hints">{MODEL_HINTS.map((m) => <option key={m} value={m} />)}</datalist>
+        <button type="submit" className="btn-ghost" disabled={busy || value.trim() === (own || '')}>Set</button>
+        {own && <button type="button" className="btn-ghost" disabled={busy} onClick={() => apply('')}>Reset</button>}
+      </div>
+      <p className="muted">
+        {isCeo ? 'The CEO leads every turn: this is the model of everyone who has none of their own.'
+          : own ? 'Works as their own agent on this model, from the next turn.'
+            : 'No model of their own: the CEO plays this role.'}
+      </p>
+      {problem && <p className="con-error" role="alert">{problem}</p>}
+    </form>
+  );
+}
+
+export function EmployeeFile({ person, roster, departments, phase, tasks, events, onSelect, onClose, models, onSetModel }) {
   const manager = roster.find((r) => r.id === person.reportsTo);
   const reports = roster.filter((r) => r.reportsTo === person.id);
   const department = departments.find((d) => d.id === person.department)?.name || person.department;
@@ -33,6 +76,8 @@ export function EmployeeFile({ person, roster, departments, phase, tasks, events
         <span className="file-label">Now</span>
         {person.note || (person.status === 'idle' ? 'Available.' : 'Nothing to report.')}
       </p>
+
+      {models && onSetModel && <ModelPicker person={person} models={models} onSetModel={onSetModel} />}
 
       <dl className="file-facts">
         <div>

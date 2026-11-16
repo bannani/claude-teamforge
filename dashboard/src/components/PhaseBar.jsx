@@ -20,24 +20,19 @@ export function PhaseBar({ phase }) {
   const meta = PHASES[current];
 
   return (
-    <div className="panel phasebar">
-      <div className="phase-info">
-        <div>
-          <span className="eyebrow">Current phase</span>
-          <h2 className="phase-current">
-            {meta.label}
-            {meta.gate && <span className="phase-gate-tag">waiting for your approval</span>}
-          </h2>
-        </div>
-        <span className="phase-count">{current + 1} <em>/ {PHASES.length}</em></span>
-      </div>
+    <div
+      className="panel phasebar" role="group"
+      aria-label={`Workflow: ${meta.label}${meta.gate ? ', waiting for your approval' : ''}, step ${current + 1} of ${PHASES.length}`}
+    >
       <div className="phase-seg-row">
         {PHASES.map((p, i) => (
           <div
             key={p.id + i}
             className={`phase-seg ${i < current ? 'past' : ''} ${i === current ? 'current' : ''} ${p.gate ? 'gate' : ''}`}
+            aria-current={i === current ? 'step' : undefined}
+            title={`${p.label}${i < current ? ' (done)' : i === current ? ' (current)' : ''}`}
           >
-            <div className="seg-bar">{p.gate ? (i < current ? '✓' : '🔒') : ''}</div>
+            <div className="seg-bar">{p.gate ? (i < current ? '✓' : '🔒') : i < current ? '✓' : ''}</div>
             <span className="seg-label">{p.label}</span>
           </div>
         ))}

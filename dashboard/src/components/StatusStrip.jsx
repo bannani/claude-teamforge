@@ -16,11 +16,11 @@ export function StatusStrip({ agents }) {
     { label: 'Review', ...tile(byRole.reviewer) },
   ];
   return (
-    <div className="status-strip">
+    <div className="status-strip" role="status" aria-label="Quality status">
       {tiles.map((t) => (
         <div key={t.label} className={`panel status-tile ${t.state}`}>
           <span className="status-label">{t.label}</span>
-          <span className="status-text">{t.text}</span>
+          <span className="status-text" title={t.text}>{t.text}</span>
         </div>
       ))}
     </div>

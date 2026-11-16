@@ -11,12 +11,14 @@ const VIEWS = [
 
 // The company column: headcount per department, the office or the org chart,
 // and the selected employee's file.
-export function Company({ company, agents, tasks, events, phase }) {
+export function Company({ company, agents, tasks, events, phase, validations = [], models, onSetModel }) {
   const [view, setView] = useState('office');
   const [selected, setSelected] = useState(null);
   const roster = buildRoster(company, agents);
   const departments = departmentsOf(company, roster);
   const person = roster.find((r) => r.id === selected);
+  // Wait for the role catalog: laying people out twice would make everyone walk at page load.
+  if (!company.loaded) return <div className="panel crew-panel"><div className="crew-room" aria-busy="true" /></div>;
 
   return (
     <>
@@ -47,7 +49,7 @@ export function Company({ company, agents, tasks, events, phase }) {
           </ul>
         </div>
         {view === 'office'
-          ? <CrewRoom roster={roster} departments={departments} selected={selected} onSelect={setSelected} />
+          ? <CrewRoom roster={roster} departments={departments} selected={selected} onSelect={setSelected} phase={phase} validations={validations} />
           : <OrgChart roster={roster} departments={departments} selected={selected} onSelect={setSelected} />}
       </div>
       {person
@@ -55,6 +57,7 @@ export function Company({ company, agents, tasks, events, phase }) {
           <EmployeeFile
             person={person} roster={roster} departments={departments} phase={phase}
             tasks={tasks} events={events} onSelect={setSelected} onClose={() => setSelected(null)}
+            models={models} onSetModel={onSetModel}
           />
         )
         : <p className="muted file-hint">Select an employee to open their file: role, responsibilities, tasks.</p>}

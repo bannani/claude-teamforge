@@ -1,0 +1,3 @@
+#!/bin/sh
+# `teamforge` on PATH for the agent the worker starts (and for `npm link`).
+exec node "$(dirname "$0")/../cli.mjs" "$@"

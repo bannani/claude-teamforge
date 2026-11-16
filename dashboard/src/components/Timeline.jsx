@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Collapsible } from './Collapsible.jsx';
 
 const ICONS = {
   prompt: '💬', tool: '🔧', phase: '🚦', agent: '👤', task: '📋',
@@ -9,7 +10,7 @@ function describe(e) {
   const p = e.payload || {};
   switch (e.kind) {
     case 'prompt': return `user: ${p.text || ''}`;
-    case 'phase': return p.to ? `phase ${p.from} → ${p.to}` : `mission started: ${p.title || ''}`;
+    case 'phase': return p.to ? `phase ${p.from} → ${p.to}` : `${p.kind === 'spike' ? 'spike' : 'mission'} started: ${p.title || ''}`;
     case 'agent': return `${p.role} → ${p.status}${p.note ? ` (${p.note})` : ''}`;
     case 'task': return `task "${p.task}" → ${p.status}`;
     case 'decision': return `decision "${p.title}" ${p.status}`;
@@ -40,7 +41,7 @@ export function Timeline({ events }) {
   }, []);
 
   return (
-    <div className="panel timeline">
+    <Collapsible title="Timeline" count={events.length} className="timeline">
       {events.length === 0 && <p className="muted">Quiet for now…</p>}
       <ul className="timeline-rail">
         {events.map((e) => (
@@ -59,6 +60,6 @@ export function Timeline({ events }) {
           )
         ))}
       </ul>
-    </div>
+    </Collapsible>
   );
 }

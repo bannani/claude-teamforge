@@ -2,6 +2,22 @@
 
 Spec: `docs/specs/2026-11-12-standalone-webapp-design.md` · Branch: `feat/standalone-webapp`
 
+## Status (2026-11-12)
+
+Order changed during execution: no API key was available on the development
+machine, so the Copilot path was built first to get a usable app.
+
+- **Done:** Task 1 (Node floor), Task 2 (auth), Task 4 (storage), Task 12 (Copilot
+  provider), Task 13 (launcher, plugin removed), Task 14 (docs, 1.0.0), the console
+  (Task 10) and the chat endpoints (Task 8) for the Copilot provider. Verified end
+  to end against the real Copilot CLI (idea → done gate).
+- **Not built:** the in-process agent loop and tools (Tasks 5–7), the Anthropic
+  and OpenAI / GitHub Models adapters (Tasks 9, 11), per-role providers and
+  `config.json` (Task 3 is reduced to Copilot detection + `TEAMFORGE_MODEL`).
+- **Differs from the plan:** Copilot's write lock uses exact document paths, and a
+  refused command gets an "Allow <program>" button instead of an approval card
+  (see FR-045 in the spec).
+
 ## Global constraints
 
 - Zero runtime npm dependencies. Node ≥ 22.13. ES modules, same style as `worker/*.mjs`.

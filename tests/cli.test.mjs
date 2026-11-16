@@ -54,34 +54,26 @@ test('agent, task, decide, validate, event round-trip', async () => {
   const d = JSON.parse((await cli('decide', 'Use SSE', '--detail', 'simple')).stdout);
   await cli('decide-set', String(d.decision.id), 'approved');
   const v = JSON.parse((await cli('validate', 'ask', 'spec_gate', 'Approve spec?')).stdout);
-  await cli('validate', 'set', String(v.validation.id), 'approved', '--answer', 'yes');
+  assert.equal(v.validation.status, 'pending');
   await cli('event', 'note', '--json', '{"text":"hello"}');
 
   const state = JSON.parse((await cli('state')).stdout);
   assert.equal(state.agents.find((a) => a.role === 'pm').status, 'working');
   assert.equal(state.tasks[0].status, 'done');
-  assert.equal(state.validations[0].status, 'approved');
+  assert.equal(state.validations[0].status, 'pending');
 });
 
-test('validate wait blocks until the dashboard answers', async () => {
-  const v = JSON.parse((await cli('validate', 'ask', 'plan_gate', 'Approve plan?')).stdout);
-  const id = v.validation.id;
-  const waiting = cli('validate', 'wait', String(id), '--timeout', '20');
-  setTimeout(() => {
-    cli('validate', 'set', String(id), 'approved', '--answer', 'clicked ✓');
-  }, 400);
-  const { stdout } = await waiting;
-  const out = JSON.parse(stdout);
-  assert.equal(out.validation.status, 'approved');
-  assert.equal(out.validation.answer, 'clicked ✓');
+test('a gate cannot be answered from the CLI', async () => {
+  for (const args of [['validate', 'set', '1', 'approved'], ['validate', 'wait', '1']]) {
+    await assert.rejects(cli(...args), (err) => { assert.equal(err.code, 1); return true; });
+  }
+  const state = JSON.parse((await cli('state')).stdout);
+  assert.equal(state.validations[0].status, 'pending');
 });
 
-test('validate wait times out with exit 4', async () => {
-  const v = JSON.parse((await cli('validate', 'ask', 'done_gate', 'Ship?')).stdout);
-  await assert.rejects(
-    cli('validate', 'wait', String(v.validation.id), '--timeout', '0'),
-    (err) => { assert.equal(err.code, 4); return true; },
-  );
+test('no arguments: starts the worker if needed and prints the web app URL for this directory', async () => {
+  const { stdout } = await cli('--no-open', '1');
+  assert.match(stdout, new RegExp(`${env.TEAMFORGE_URL}/\\?project=${encodeURIComponent(PROJECT)}`));
 });
 
 test('gate-check exits 2 on deny', async () => {

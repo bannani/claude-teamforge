@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// teamforge CLI — Claude's remote control for the workflow worker.
-// Prints worker JSON responses on stdout; refusals exit nonzero so Claude sees them.
+// teamforge CLI. With no arguments: start the worker and open the web app for
+// the current directory. With a command: the agent's remote control for the
+// workflow worker — JSON on stdout, refusals exit nonzero so the agent sees them.
 
 import { spawn } from 'node:child_process';
-import { mkdirSync, openSync } from 'node:fs';
+import { mkdirSync, openSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,13 @@ const BASE = process.env.TEAMFORGE_URL || 'http://127.0.0.1:4519';
 const PROJECT = () => process.env.TEAMFORGE_PROJECT || process.cwd();
 const SERVER = join(fileURLToPath(new URL('.', import.meta.url)), 'server.mjs');
 const LOG_DIR = join(homedir(), '.claude-teamforge');
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+
+// The worker only answers callers holding its token (see worker/auth.mjs).
+function token() {
+  if (process.env.TEAMFORGE_TOKEN) return process.env.TEAMFORGE_TOKEN;
+  try { return readFileSync(join(LOG_DIR, 'worker.token'), 'utf8').trim(); } catch { return ''; }
+}
 
 function parseArgs(argv) {
   const positional = [];
@@ -30,7 +38,7 @@ async function api(method, path, body) {
   try {
     res = await fetch(BASE + path, {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-teamforge-token': token() },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(5000),
     });
@@ -57,21 +65,39 @@ async function activeSession() {
 
 const print = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`);
 
-async function healthy() {
+// The running worker's health report, or null when nothing answers.
+async function health() {
   try {
     const res = await fetch(`${BASE}/api/health`, { signal: AbortSignal.timeout(700) });
-    return res.ok;
-  } catch { return false; }
+    return res.ok ? await res.json() : null;
+  } catch { return null; }
+}
+const healthy = async () => (await health()) !== null;
+
+// After an upgrade the worker left running is the old code: replace it.
+async function stopStaleWorker(running) {
+  let pid = 0;
+  try { pid = Number(readFileSync(join(LOG_DIR, 'worker.pid'), 'utf8')); } catch { /* started before pid files existed */ }
+  if (pid > 0) {
+    try { process.kill(pid); } catch { /* already gone */ }
+    for (let i = 0; i < 20 && await healthy(); i += 1) await new Promise((r) => { setTimeout(r, 150); });
+  }
+  if (await healthy()) {
+    process.stderr.write(`teamforge: a different worker version (v${running.version}) is running at ${BASE} and could not be stopped — stop it, then run teamforge again\n`);
+    process.exit(3);
+  }
 }
 
 async function ensureWorker() {
-  if (await healthy()) return print({ ok: true, already_running: true });
+  const running = await health();
+  if (running?.version === VERSION) return { ok: true, already_running: true };
+  if (running) await stopStaleWorker(running);
   mkdirSync(LOG_DIR, { recursive: true });
   const log = openSync(join(LOG_DIR, 'worker.log'), 'a');
   spawn(process.execPath, [SERVER], { detached: true, stdio: ['ignore', log, log] }).unref();
   for (let i = 0; i < 20; i += 1) {
     await new Promise((r) => { setTimeout(r, 250); });
-    if (await healthy()) return print({ ok: true, started: true });
+    if (await healthy()) return { ok: true, started: true };
   }
   process.stderr.write('teamforge: worker failed to start — see ~/.claude-teamforge/worker.log\n');
   process.exit(3);
@@ -99,14 +125,14 @@ async function openBrowser(url) {
   return false;
 }
 
-const USAGE = `teamforge <command>
+const USAGE = `teamforge                                     (start the worker and open the web app for this directory)
+teamforge <command>
   start --name <n> --title <t> [--project <path>]
   state | phase <phase>
   agent <role> --status idle|working|blocked|done [--note <text>]
   task add <title> [--role <role>] | task set <id> <status>
   decide <title> [--detail <d>] | decide-set <id> approved|rejected
-  validate ask <gate> <question> | validate set <id> approved|changes_requested [--answer <a>]
-  validate wait <id> [--timeout <seconds>]   (blocks until answered in dashboard or chat)
+  validate ask <gate> <question>             (the client answers in the web app)
   open                                       (open the dashboard in the browser)
   event <kind> [--json <payload>]
   gate-check <file_path>
@@ -119,6 +145,13 @@ async function main() {
   if (opts.project) process.env.TEAMFORGE_PROJECT = opts.project;
 
   switch (cmd) {
+    case undefined: {
+      await ensureWorker();
+      const url = `${BASE}/?project=${encodeURIComponent(project)}`;
+      const opened = 'no-open' in opts ? false : await openBrowser(url);
+      process.stdout.write(`TeamForge is running for ${project}\n${opened ? 'Opened' : 'Open'} ${url}\n`);
+      return undefined;
+    }
     case 'start': {
       const out = await api('POST', '/api/sessions', {
         project_path: project,
@@ -171,22 +204,7 @@ async function main() {
           gate: rest[1], question: rest.slice(2).join(' '),
         }));
       }
-      if (rest[0] === 'set') {
-        return print(await api('PATCH', `/api/validations/${rest[1]}`, {
-          status: rest[2], answer: opts.answer || '',
-        }));
-      }
-      if (rest[0] === 'wait') {
-        const deadline = Date.now() + Number(opts.timeout || 240) * 1000;
-        while (Date.now() < deadline) {
-          const { validation } = await api('GET', `/api/validations/${rest[1]}`);
-          if (validation.status !== 'pending') return print({ validation });
-          await new Promise((r) => { setTimeout(r, 1500); });
-        }
-        print({ timeout: true, id: Number(rest[1]) });
-        process.exit(4);
-      }
-      break;
+      break; // a gate is answered by the client in the web app, never from here
     }
     case 'event': {
       const { session } = await activeSession();
@@ -203,7 +221,7 @@ async function main() {
       return undefined;
     }
     case 'ensure-worker':
-      return ensureWorker();
+      return print(await ensureWorker());
     default:
       process.stderr.write(`${USAGE}\n`);
       process.exit(1);

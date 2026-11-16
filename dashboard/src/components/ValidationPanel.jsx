@@ -6,40 +6,27 @@ const GATE_META = {
   done_gate: { icon: '🏁', label: 'final sign-off' },
 };
 
-export function ValidationPanel({ validations }) {
-  const pending = validations.filter((v) => v.status === 'pending');
-  const lastAnswered = [...validations].reverse().find((v) => v.status !== 'pending');
+// the document each gate asks the client to approve
+const GATE_DOC = { spec_gate: ['docs/spec.md', 'Read the spec'], plan_gate: ['docs/plan.md', 'Read the plan'] };
 
-  if (pending.length === 0) {
-    return (
-      <div className="panel validation-panel quiet">
-        <span className="v-idle-dot" />
-        <p>
-          No questions right now. When Claude needs your validation
-          (spec, plan, sign-off) it appears here — answer with one click.
-        </p>
-        {lastAnswered && (
-          <span className={`v-last badge ${lastAnswered.status}`}>
-            {GATE_META[lastAnswered.gate]?.icon} {lastAnswered.gate.replace('_', ' ')}: {lastAnswered.status.replace('_', ' ')}
-          </span>
-        )}
-      </div>
-    );
-  }
+export function ValidationPanel({ validations, onOpenDoc }) {
+  const pending = validations.filter((v) => v.status === 'pending');
+  // Nothing to decide → nothing on screen; the panel appears above the console when a gate opens.
+  if (pending.length === 0) return null;
 
   return (
-    <div className="panel validation-panel active">
+    <div className="panel validation-panel active" role="region" aria-live="polite" aria-label="Pending validation">
       <div className="validation-head">
         <span className="v-ping" />
-        <h3>Claude is waiting for you</h3>
+        <h3>The company is waiting for you</h3>
         <span className="muted">answer here or in chat</span>
       </div>
-      {pending.map((v) => <ValidationItem key={v.id} v={v} />)}
+      {pending.map((v) => <ValidationItem key={v.id} v={v} onOpenDoc={onOpenDoc} />)}
     </div>
   );
 }
 
-function ValidationItem({ v }) {
+function ValidationItem({ v, onOpenDoc }) {
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
   const meta = GATE_META[v.gate] || { icon: '✋', label: v.gate };
@@ -68,10 +55,16 @@ function ValidationItem({ v }) {
         <span className="muted">{v.ts?.slice(11, 16)}</span>
       </div>
       <p className="validation-question">{v.question}</p>
+      {onOpenDoc && GATE_DOC[v.gate] && (
+        <button type="button" className="btn-ghost doc-open" onClick={() => onOpenDoc(GATE_DOC[v.gate][0])}>
+          {GATE_DOC[v.gate][1]} — you can edit it before approving
+        </button>
+      )}
       <div className="validation-controls">
         <input
           className="answer-input"
-          placeholder="Optional comment for Claude…"
+          aria-label="Optional comment for the team"
+          placeholder="Optional comment for the team…"
           value={answer}
           disabled={busy}
           onChange={(e) => setAnswer(e.target.value)}

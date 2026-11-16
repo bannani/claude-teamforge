@@ -51,14 +51,15 @@ export function TaskBoard({ tasks, roleNames = {} }) {
         </div>
         <ProgressRing pct={pct} />
       </div>
-      {grouped.map((g) => g.items.length > 0 && (
+      {grouped.map((g) => (
         <div key={g.id} className={`task-group ${g.id}`}>
-          <div className="task-group-label">{g.label} · {g.items.length}</div>
+          <div className="task-group-label">{g.label} <span className="count-pill">{g.items.length}</span></div>
+          {g.items.length === 0 && <p className="muted task-empty">Nothing here</p>}
           <ul className="task-list">
             {g.items.map((t) => (
               <li key={t.id} className={`task ${t.status}`}>
                 <span className={`badge ${t.status}`}>{t.status.replace('_', ' ')}</span>
-                <span className="task-title">{t.title}</span>
+                <span className="task-title" title={t.title}>{t.title}</span>
                 {t.role && <span className="role-chip">{roleNames[t.role] || t.role}</span>}
               </li>
             ))}

@@ -129,9 +129,14 @@ running inside the worker against the user's own model provider.
   console. Copilot uses its own tools. It reports workflow state by running the
   `teamforge` CLI.
 - FR-045. For Copilot the write lock is applied through its permission flags:
-  before `implementation` only `write(docs/**)`, `write(**/*.md)` and
-  `shell(teamforge:*)` are allowed; from `implementation` on, `write` and the
-  project's always-allowed programs are added. Flags are recomputed each turn.
+  before `implementation` only the four documents `docs/spec.md`,
+  `docs/stories.md`, `docs/design.md`, `docs/plan.md`, `shell(teamforge:*)` and
+  read-only commands are allowed; from `implementation` on, `write` and the
+  project's allowed programs are added. Flags are recomputed each turn.
+  (Exact paths, not globs: probing Copilot CLI 1.0.109 showed glob write rules
+  are ignored in prompt mode. A denied shell command shows an "Allow <program>"
+  button in the console instead of an approval card, because Copilot cannot
+  pause mid-turn.)
 - FR-046. Provider errors (bad key, rate limit, network) appear in the console
   as an error line with the provider's message; the turn ends cleanly.
 
@@ -200,7 +205,7 @@ running inside the worker against the user's own model provider.
 - AC-015. Given an invalid `ANTHROPIC_API_KEY`, when a message is sent, then an
   error line shows the provider's message and the session stays usable.
 - AC-016. Given the Copilot provider in phase `spec`, then the spawned command
-  line allows `write(docs/**)` and `shell(teamforge:*)` and does not allow
+  line allows `write(docs/spec.md)` and `shell(teamforge:*)` and does not allow
   unscoped `write`.
 - AC-017. Given `roles.backend.provider = "openai"`, when the coordinator
   delegates to `backend`, then that sub-loop uses the OpenAI adapter.

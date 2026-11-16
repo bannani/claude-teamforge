@@ -26,6 +26,12 @@ CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY, session_id INTEGER 
 CREATE TABLE IF NOT EXISTS validations(id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
  gate TEXT NOT NULL, question TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
  answer TEXT DEFAULT '', ts TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
+ role TEXT NOT NULL, content TEXT NOT NULL DEFAULT '{}', ts TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS project_settings(project_path TEXT NOT NULL, key TEXT NOT NULL,
+ value TEXT NOT NULL, UNIQUE(project_path, key));
+CREATE TABLE IF NOT EXISTS command_grants(project_path TEXT NOT NULL, program TEXT NOT NULL,
+ UNIQUE(project_path, program));
 `;
 
 export function openDb(path = DEFAULT_DB_PATH) {
@@ -33,16 +39,28 @@ export function openDb(path = DEFAULT_DB_PATH) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode=WAL;');
   db.exec(SCHEMA);
+  // Added in 1.0: the agent's own conversation id (databases created earlier lack the column).
+  if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'agent_session')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN agent_session TEXT');
+  }
+  // Added in 1.1: a session is a build mission or a spike (read-only questions about the code).
+  if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'kind')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'mission'");
+  }
+  // A project shows one kind at a time, chosen by its mode; the other kind's session waits.
+  const kindFor = (project_path) => (db.prepare(
+    "SELECT value FROM project_settings WHERE project_path = ? AND key = 'mode'",
+  ).get(project_path)?.value === 'spike' ? 'spike' : 'mission');
 
   const touch = (id) => db.prepare(
     "UPDATE sessions SET updated_at = datetime('now') WHERE id = ?",
   ).run(id);
 
   return {
-    createSession({ project_path, project_name = '', title = '' }) {
+    createSession({ project_path, project_name = '', title = '', kind = 'mission' }) {
       const { lastInsertRowid: id } = db.prepare(
-        'INSERT INTO sessions(project_path, project_name, title) VALUES(?,?,?)',
-      ).run(project_path, project_name, title);
+        'INSERT INTO sessions(project_path, project_name, title, kind) VALUES(?,?,?,?)',
+      ).run(project_path, project_name, title, kind === 'spike' ? 'spike' : 'mission');
       const seed = db.prepare('INSERT INTO agents(session_id, role) VALUES(?,?)');
       for (const role of ROLES) seed.run(id, role);
       return this.getSession(Number(id));
@@ -54,8 +72,77 @@ export function openDb(path = DEFAULT_DB_PATH) {
 
     getActiveSession(project_path) {
       return db.prepare(
-        "SELECT * FROM sessions WHERE project_path = ? AND phase != 'done' ORDER BY id DESC LIMIT 1",
-      ).get(project_path);
+        "SELECT * FROM sessions WHERE project_path = ? AND kind = ? AND phase != 'done' ORDER BY id DESC LIMIT 1",
+      ).get(project_path, kindFor(project_path));
+    },
+
+    getLatestSessionFor(project_path) {
+      return db.prepare('SELECT * FROM sessions WHERE project_path = ? AND kind = ? ORDER BY id DESC LIMIT 1')
+        .get(project_path, kindFor(project_path));
+    },
+
+    setAgentSession(id, agent_session) {
+      db.prepare('UPDATE sessions SET agent_session = ? WHERE id = ?').run(agent_session, id);
+      return this.getSession(id);
+    },
+
+    // Chat transcript. role: user | assistant | tool | error; content is a small JSON object.
+    addMessage(session_id, role, content) {
+      const { lastInsertRowid: id } = db.prepare(
+        'INSERT INTO messages(session_id, role, content) VALUES(?,?,?)',
+      ).run(session_id, role, JSON.stringify(content));
+      touch(session_id);
+      return { id: Number(id), session_id, role, ...content };
+    },
+
+    listMessages(session_id) {
+      return db.prepare('SELECT id, role, content, ts FROM messages WHERE session_id = ? ORDER BY id')
+        .all(session_id).map(({ content, ...m }) => ({ ...m, ...JSON.parse(content) }));
+    },
+
+    // Shell programs the client allowed the agent to run in a project.
+    grantCommand(project_path, program) {
+      db.prepare('INSERT OR IGNORE INTO command_grants(project_path, program) VALUES(?,?)').run(project_path, program);
+    },
+
+    revokeCommand(project_path, program) {
+      db.prepare('DELETE FROM command_grants WHERE project_path = ? AND program = ?').run(project_path, program);
+    },
+
+    // Per-project switches chosen from the console: allow_all, model, mode.
+    getSetting(project_path, key) {
+      return db.prepare('SELECT value FROM project_settings WHERE project_path = ? AND key = ?').get(project_path, key)?.value ?? null;
+    },
+
+    // { key: value } for the keys starting with `prefix`
+    listSettings(project_path, prefix) {
+      const rows = db.prepare('SELECT key, value FROM project_settings WHERE project_path = ?').all(project_path);
+      return Object.fromEntries(rows.filter((r) => r.key.startsWith(prefix)).map((r) => [r.key.slice(prefix.length), r.value]));
+    },
+
+    setSetting(project_path, key, value) {
+      if (value === null) {
+        db.prepare('DELETE FROM project_settings WHERE project_path = ? AND key = ?').run(project_path, key);
+      } else {
+        db.prepare(`INSERT INTO project_settings(project_path, key, value) VALUES(?,?,?)
+          ON CONFLICT(project_path, key) DO UPDATE SET value = excluded.value`).run(project_path, key, String(value));
+      }
+    },
+
+    clearMessages(session_id) {
+      db.prepare('DELETE FROM messages WHERE session_id = ?').run(session_id);
+    },
+
+    // The client closes a mission from the console, whatever its phase.
+    closeSession(id) {
+      db.prepare("UPDATE sessions SET phase = 'done', updated_at = datetime('now') WHERE id = ?").run(id);
+      db.prepare("UPDATE agents SET status = 'idle', note = '' WHERE session_id = ? AND status IN ('working','blocked')").run(id);
+      return this.getSession(id);
+    },
+
+    listGrants(project_path) {
+      return db.prepare('SELECT program FROM command_grants WHERE project_path = ? ORDER BY program')
+        .all(project_path).map((r) => r.program);
     },
 
     getLatestSession() {

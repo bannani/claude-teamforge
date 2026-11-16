@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "TeamForge Browser",
+  "version": "1.0.0",
+  "description": "Lets your TeamForge company act in this Chrome: it opens pages, clicks, types and reads the screen in a TeamForge tab, on the sites you allowed.",
+  "minimum_chrome_version": "120",
+  "permissions": ["debugger", "tabs", "tabGroups", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    { "matches": ["http://127.0.0.1/*", "http://localhost/*"], "js": ["pair.js"], "run_at": "document_idle" }
+  ],
+  "action": { "default_title": "TeamForge Browser", "default_popup": "popup.html" },
+  "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+}

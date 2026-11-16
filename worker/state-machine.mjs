@@ -37,6 +37,8 @@ export function canTransition(from, to, { gateApproved = false } = {}) {
 }
 
 const WRITE_OPEN_PHASES = new Set(['implementation', 'tests', 'review', 'done_gate', 'done']);
+export const isWriteOpen = (phase) => WRITE_OPEN_PHASES.has(phase);
+
 const ALWAYS_WRITABLE = /(^|\/)(docs|\.claude|\.claude-plugin)(\/|$)/;
 
 export function gateAllowsWrite(phase, filePath) {
