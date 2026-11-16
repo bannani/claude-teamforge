@@ -1,7 +1,21 @@
 # ⚒ TeamForge
 
+**A visible software company of AI agents that can't skip steps.**
+
+[![GitHub Copilot CLI](https://img.shields.io/badge/GitHub_Copilot-CLI-8957e5)](https://github.com/features/copilot)
+[![Tests](https://img.shields.io/badge/tests-161_passing-brightgreen)](tests/)
+[![Node](https://img.shields.io/badge/node-%E2%89%A5_22.13-339933?logo=node.js&logoColor=white)](package.json)
+[![Runtime deps](https://img.shields.io/badge/runtime_deps-0-blue)](package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
 A local web app that runs a **visible software company of AI agents** on your
 project, with an enforced idea-to-done workflow and a live dashboard.
+
+![TeamForge dashboard: a mission going from idea to done, with the team working and the gates approved from the dashboard](docs/assets/teamforge-demo.gif)
+
+> Until v0.5 TeamForge was a Claude Code plugin. From v1.0 it is a standalone app
+> driven by GitHub Copilot CLI: the plugin (hooks, skill, marketplace manifest) is
+> gone from this branch. The last plugin version is commit `cc45d7d`.
 
 ```
 Brainstorm → Questions → Spec → ✋ → Plan → ✋ → Implementation → Tests → Review → ✋ → Done
@@ -244,3 +258,21 @@ tests a fake `copilot` script.
 - `skills/` — the company's methods: one playbook per phase (`brainstorm.md` … `review.md`), handed over when the phase is entered, and `spike.md`, the briefing of spike mode
 - `dashboard/` — React + Vite source; prebuilt `dist/` committed
 - `docs/` — specs, plans, install guide, demo scenario
+
+## Author
+
+Built by **Mohamed Fares Bannani**, Senior Software Engineer and AI Engineering Lead in Bordeaux. I design agentic development workflows and the tooling around them: agents, skills, hooks, plugins and MCP servers.
+
+[LinkedIn](https://www.linkedin.com/in/mohamed-fares-bannani-440881151) · [GitHub](https://github.com/bannani)
+
+If TeamForge is useful to you, a ⭐ on the repo helps a lot.
+
+## Credits
+
+Inspired by [Superpowers](https://github.com/obra/superpowers) for workflow discipline and
+[claude-mem](https://github.com/thedotmack/claude-mem) for the worker → SQLite → UI
+architecture.
+
+## License
+
+[MIT](LICENSE)
