@@ -1,3 +1,4 @@
+import { TAB } from '../tab.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Collapsible } from './Collapsible.jsx';
 import { Markdown } from './Markdown.jsx';
@@ -74,7 +75,7 @@ export function DocViewer({ project, path, title, version, onClose, onSaved }) {
     try {
       const res = await fetch('/api/docs/file', {
         method: 'PUT', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ project_path: project, path, content: draft, base_rev: theirs ?? doc.rev }),
+        body: JSON.stringify({ project_path: project, tab: TAB, path, content: draft, base_rev: theirs ?? doc.rev }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.ok) {

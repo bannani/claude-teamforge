@@ -34,7 +34,12 @@ export function createChat({
   const requireProject = (project) => requireProjectDir(project, ChatError);
   const allowAll = (project) => db.getSetting(project, 'allow_all') === '1';
   // build: the company works on a mission. spike: read-only questions about the code.
-  const modeOf = (project) => (db.getSetting(project, 'mode') === 'spike' ? 'spike' : 'build');
+  // Each TeamForge tab in the browser has its own session and its own mode. A console
+  // command runs synchronously, so the tab it came from is kept here while it runs;
+  // a turn lasts, so it carries its tab along explicitly.
+  let cmdTab = '';
+  const active = (project, tab = cmdTab) => db.getActiveSession(project, tab);
+  const modeOf = (project, tab = cmdTab) => db.modeOf(project, tab);
   // The sites the client opened to the team's browser with /browser; none = no browser.
   const sitesOf = (project) => (db.getSetting(project, 'browser') || '').split(' ').filter(Boolean);
   // own: the client's own Chrome, through the TeamForge extension. separate: a window of TeamForge's own.
@@ -56,35 +61,36 @@ export function createChat({
 
   // A line from TeamForge itself (command replies, notices): shown in the
   // console, kept in the transcript when a mission is open, never sent to the agent.
-  function say(project, text, command = null) {
-    const session = db.getActiveSession(project);
+  function say(project, text, command = null, tab = cmdTab) {
+    const session = active(project, tab);
     if (session) db.addMessage(session.id, 'system', { text, command });
-    emit(project, { type: 'system', text, command });
+    emit(project, { type: 'system', text, command }, tab);
   }
   const sendPermissions = (project) => emit(project, {
     type: 'permissions', grants: db.listGrants(project), allowAll: allowAll(project), browser: sitesOf(project), browserKind: browserKind(project),
   });
 
-  function sessionFor(project, text) {
-    const active = db.getActiveSession(project);
-    if (active) return active;
+  function sessionFor(project, text, tab) {
+    const open = active(project, tab);
+    if (open) return open;
     const title = text.replace(/\s+/g, ' ').trim().slice(0, 80);
     const session = db.createSession({
-      project_path: project, project_name: basename(project), title, kind: modeOf(project) === 'spike' ? 'spike' : 'mission',
+      project_path: project, project_name: basename(project), title, tab, kind: modeOf(project, tab) === 'spike' ? 'spike' : 'mission',
     });
     db.addEvent(session.id, 'phase', { phase: 'idea', title, kind: session.kind });
     return session;
   }
 
-  async function runTurn(project, text, decoded = []) {
+  async function runTurn(project, text, decoded = [], tab = '') {
+    const tell = (event) => emit(project, event, tab); // to the tab this turn belongs to
     const { provider: name } = provider();
     const model = modelFor(project);
-    let session = sessionFor(project, text);
+    let session = sessionFor(project, text, tab);
     const images = storeImages(attachDir, session.id, decoded);
     const shown = images.map(({ file, name: label }) => ({ file, name: label }));
     db.addMessage(session.id, 'user', shown.length ? { text, images: shown } : { text });
     db.addEvent(session.id, 'prompt', { text: text.slice(0, 300) });
-    emit(project, { type: 'user', text, images: shown });
+    tell({ type: 'user', text, images: shown });
 
     // A spike touches nothing in the project: no agent files, no docs/ folder.
     const spike = session.kind === 'spike';
@@ -153,13 +159,13 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
     const shots = new Set();
 
     const turn = turns.get(project);
-    emit(project, { type: 'turn_start', provider: name });
+    tell({ type: 'turn_start', provider: name });
     broadcast();
     let status = 'end';
     const fail = (message) => {
       status = 'error';
       db.addMessage(session.id, 'error', { text: message });
-      emit(project, { type: 'error', text: message });
+      tell({ type: 'error', text: message });
     };
     try {
       if (!spike) mkdirSync(join(project, 'docs'), { recursive: true }); // in a mission the agent may always write docs/
@@ -181,7 +187,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         env: {
           ...process.env,
           PATH: `${binDir}${delimiter}${process.env.PATH || ''}`,
-          TEAMFORGE_URL: baseUrl(), TEAMFORGE_TOKEN: token, TEAMFORGE_PROJECT: project,
+          TEAMFORGE_URL: baseUrl(), TEAMFORGE_TOKEN: token, TEAMFORGE_PROJECT: project, TEAMFORGE_TAB: tab,
         },
         signal: turn.abort.signal,
         onEvent(raw) {
@@ -195,7 +201,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
           }
           if (event.type === 'agent_error') {
             db.addMessage(session.id, 'error', { text: event.text });
-            emit(project, { type: 'error', text: event.text });
+            tell({ type: 'error', text: event.text });
             return;
           }
           if (event.type === 'tool_start') started.set(event.id, Date.now());
@@ -231,7 +237,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
             if (!event.ok) {
               const line = `${ROLE[event.role].title} ${why}: ${event.error}`;
               db.addMessage(session.id, 'error', { text: line });
-              emit(project, { type: 'error', text: line });
+              tell({ type: 'error', text: line });
             }
             broadcast();
           }
@@ -248,7 +254,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
             }
             broadcast();
           }
-          emit(project, event);
+          tell(event);
         },
       });
       if (turn.abort.signal.aborted) status = 'stopped';
@@ -259,48 +265,54 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
       seat('idle');
     }
     if (strayed) {
-      say(project, `The team tried to open \`${strayed}\` in the browser, which you have not allowed: the turn was stopped. \`/browser ${strayed}\` allows that site.`);
+      say(project, `The team tried to open \`${strayed}\` in the browser, which you have not allowed: the turn was stopped. \`/browser ${strayed}\` allows that site.`, null, tab);
     }
     return status;
   }
 
   // Runs queued turns one after the other; a stop or an error drops the queue.
-  async function drain(project, text, images = []) {
-    const turn = { abort: new AbortController(), queue: [] };
+  async function drain(project, text, images = [], tab = '') {
+    const turn = { abort: new AbortController(), queue: [], tab }; // queue: { text, tab }
     turns.set(project, turn);
-    let next = text;
+    let next = { text, tab };
     let attached = images; // only the client's own message carries images
     let status = 'end';
     while (next !== undefined) {
       try {
-        status = await runTurn(project, next, attached);
+        turn.tab = next.tab;
+        status = await runTurn(project, next.text, attached, next.tab);
         attached = [];
       } catch (err) {
         status = 'error';
-        emit(project, { type: 'error', text: `Internal error: ${err?.message || err}` });
+        emit(project, { type: 'error', text: `Internal error: ${err?.message || err}` }, turn.tab);
       }
       next = status === 'end' ? turn.queue.shift() : undefined;
     }
     turns.delete(project);
-    emit(project, { type: 'turn_end', status });
+    emit(project, { type: 'turn_end', status }, turn.tab);
     broadcast();
   }
 
   // Start a turn now, or line the message up behind the running one.
-  function enqueue(project, text) {
+  function enqueue(project, text, tab = '') {
     const running = turns.get(project);
-    if (running) { running.queue.push(text); return; }
-    drain(project, text);
+    if (running) { running.queue.push({ text, tab }); return; }
+    drain(project, text, [], tab);
   }
 
-  function runCommand(project, raw) {
+  function runCommand(project, raw, tab = '') {
+    cmdTab = tab;
+    try { return commandIn(project, raw); } finally { cmdTab = ''; }
+  }
+
+  function commandIn(project, raw) {
     const line = raw.trim();
     const { name, args, known } = parseCommand(line);
     if (!known) return say(project, `Unknown command \`/${name}\`.\n${helpText()}`, line);
     if (turns.has(project) && !ANYTIME.has(name)) {
       throw new ChatError(409, `/${name} is not available while the team is working — /stop first`);
     }
-    const session = db.getActiveSession(project);
+    const session = active(project);
     const reply = (text) => say(project, text, line);
     switch (name) {
       case 'help':
@@ -336,7 +348,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         db.clearMessages(session.id);
         db.setAgentSession(session.id, null);
         edited.delete(project);
-        emit(project, { type: 'cleared' });
+        emit(project, { type: 'cleared' }, cmdTab);
         return reply(`Conversation cleared. The mission continues at phase \`${session.phase}\`; the team is briefed again on your next message.`);
       }
       case 'new': {
@@ -344,18 +356,18 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         db.addEvent(session.id, 'note', { text: `${session.kind === 'spike' ? 'spike' : 'mission'} closed by the client` });
         db.closeSession(session.id);
         edited.delete(project);
-        emit(project, { type: 'cleared' });
+        emit(project, { type: 'cleared' }, cmdTab);
         broadcast();
         return reply(session.kind === 'spike' ? 'Spike closed. Your next question starts a new one.' : 'Mission closed. Your next message starts a new one.');
       }
       case 'spike':
       case 'build': {
         if (modeOf(project) === name) return reply(`Already in ${name} mode.`);
-        db.setSetting(project, 'mode', name === 'spike' ? 'spike' : null);
+        db.setMode(project, cmdTab, name);
         edited.delete(project);
         // the other kind of session, with its own conversation, is now the one on screen
-        const now = db.getActiveSession(project);
-        emit(project, { type: 'mode', mode: name, messages: now ? db.listMessages(now.id) : [] });
+        const now = active(project);
+        emit(project, { type: 'mode', mode: name, messages: now ? db.listMessages(now.id) : [] }, cmdTab);
         broadcast();
         return reply(name === 'spike'
           ? 'Spike mode. Ask how the product behaves today: the team reads the code — it cannot change anything — and answers in business terms. Open **Technical details** under an answer for the developer\'s view. `/build` goes back to your mission.'
@@ -439,7 +451,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         // a page, not just a site: the client wants it opened, now
         const open = site.page && provider().provider;
         reply(`The team can act in ${which(kind)} on \`${origin}\`: open pages, click, type, take screenshots — in build mode and in spike mode.${kind === 'own' ? ' It works in its own TeamForge tab, through the TeamForge extension.' : ''} It acts there as whoever is signed in, and what it clicks is real. If it tries to open another site, the turn is stopped and you are asked.${open ? '\nOpening the page now.' : site.page ? '' : '\nNow tell the team what to do there, for example “open the home page and show me a screenshot”.'}`);
-        if (open) drain(project, `Open ${site.url} in the browser, wait until the page has finished loading, take a screenshot, and tell me what is on the page.`);
+        if (open) drain(project, `Open ${site.url} in the browser, wait until the page has finished loading, take a screenshot, and tell me what is on the page.`, [], cmdTab);
         return undefined;
       }
       case 'model': {
@@ -469,15 +481,17 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
   }
 
   return {
-    send(project, text, images) {
+    send(project, text, images, tab = '') {
       const decoded = decodeImages(images);
       if (typeof text !== 'string' || (!text.trim() && !decoded.length)) throw new ChatError(400, 'text required');
       requireProject(project);
-      if (isCommand(text)) { runCommand(project, text); return; }
+      if (isCommand(text)) { runCommand(project, text, tab); return; }
       const p = provider();
       if (!p.provider) throw new ChatError(400, p.reason);
-      if (turns.has(project)) throw new ChatError(409, 'a turn is already running — stop it or wait');
-      drain(project, text.trim() || 'See the attached image.', decoded);
+      if (turns.has(project)) {
+        throw new ChatError(409, turns.get(project).tab === tab ? 'a turn is already running — stop it or wait' : 'the team is already working for another TeamForge tab on this project — wait for it, or stop it there');
+      }
+      drain(project, text.trim() || 'See the attached image.', decoded, tab);
     },
 
     stop(project) {
@@ -493,29 +507,29 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
       const session = db.getSession(validation.session_id);
       if (!session || !session.agent_session || !provider().provider) return;
       // the mission is parked while the client is in spike mode: the answer must not land in the spike
-      if (db.getActiveSession(session.project_path)?.id !== session.id) return;
+      if (db.getActiveSession(session.project_path, session.tab)?.id !== session.id) return;
       const comment = validation.answer ? ` ${validation.answer}` : '';
-      enqueue(session.project_path, `[${validation.gate} ${validation.status}]${comment}`);
+      enqueue(session.project_path, `[${validation.gate} ${validation.status}]${comment}`, session.tab);
     },
 
     // The client allowed a shell program for this project: remember it and carry on.
-    grant(project, program) {
+    grant(project, program, tab = '') {
       if (!isProgramName(program)) throw new ChatError(400, 'invalid program name');
       requireProject(project);
       db.grantCommand(project, program);
-      const session = db.getActiveSession(project);
+      const session = db.getActiveSession(project, tab);
       if (session?.agent_session && session.kind !== 'spike' && provider().provider) {
-        enqueue(project, `[permission granted: ${program}] You may now run \`${program}\`. Continue where you stopped.`);
+        enqueue(project, `[permission granted: ${program}] You may now run \`${program}\`. Continue where you stopped.`, tab);
       }
     },
 
     // The client saved a document in the browser: tell them, and tell the agent on its next turn.
-    docEdited(project, path) {
+    docEdited(project, path, tab = '') {
       if (!edited.has(project)) edited.set(project, new Set());
       edited.get(project).add(path);
-      const session = db.getActiveSession(project);
+      const session = db.getActiveSession(project, tab);
       if (session) db.addEvent(session.id, 'file', { file: path, tool: 'client edit' });
-      say(project, `You edited \`${path}\`. The team re-reads it on your next message.`);
+      say(project, `You edited \`${path}\`. The team re-reads it on your next message.`, null, tab);
       broadcast();
     },
 
@@ -523,17 +537,17 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
     models: modelsOf,
     setModel,
 
-    history(project) {
+    history(project, tab = '') {
       // an open mission, or nothing: a closed mission's conversation is over
-      const session = db.getActiveSession(project);
+      const session = db.getActiveSession(project, tab);
       return {
         messages: session ? db.listMessages(session.id) : [],
-        running: turns.has(project),
+        running: turns.get(project)?.tab === tab,
         grants: db.listGrants(project),
         allowAll: allowAll(project),
         browser: sitesOf(project),
         browserKind: browserKind(project),
-        mode: modeOf(project),
+        mode: modeOf(project, tab),
         model: modelFor(project),
         models: modelsOf(project),
       };

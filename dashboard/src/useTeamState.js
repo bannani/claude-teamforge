@@ -1,3 +1,4 @@
+import { TAB } from './tab.js';
 import { useEffect, useState } from 'react';
 
 const NO_COMPANY = { departments: [], roles: [], loaded: false };
@@ -35,7 +36,7 @@ export function useTeamState(project, onChat) {
 
   useEffect(() => {
     if (!project) return undefined;
-    const query = `?project=${encodeURIComponent(project)}`;
+    const query = `?project=${encodeURIComponent(project)}&tab=${TAB}`;
     fetch(`/api/state${query}`).then((r) => r.json()).then(setState).catch(() => {});
     const es = new EventSource(`/events${query}`);
     es.onmessage = (e) => setState(JSON.parse(e.data));

@@ -229,3 +229,52 @@ test('chat events are streamed as named SSE events', async () => {
   assert.deepEqual(chat.map((e) => e.type), ['user', 'turn_start', 'text', 'message', 'turn_end']);
   assert.equal(chat.at(-1).status, 'end');
 });
+
+// ---------- one session per TeamForge tab ----------
+
+test('each TeamForge tab has its own session: a new tab starts fresh, the first keeps its conversation', async () => {
+  const p = project();
+  const q = (tab) => `/api/chat?project=${encodeURIComponent(p)}&tab=${tab}`;
+  const tabHistory = async (tab) => (await api('GET', q(tab))).body;
+  const settle = async (tab) => { for (let i = 0; i < 200; i += 1) { const h = await tabHistory(tab); if (!h.running) return h; await new Promise((r) => { setTimeout(r, 10); }); } throw new Error('turn never finished'); };
+
+  script = say('Answer for A.');
+  await api('POST', '/api/chat', { project_path: p, tab: 'tabA', text: 'first idea' });
+  await settle('tabA');
+  assert.deepEqual((await tabHistory('tabB')).messages, [], 'a new tab starts empty');
+
+  script = say('Answer for B.');
+  await api('POST', '/api/chat', { project_path: p, tab: 'tabB', text: 'another idea' });
+  const b = await settle('tabB');
+  const a = await tabHistory('tabA');
+  assert.deepEqual(a.messages.map((m) => m.text), ['first idea', 'Answer for A.']);
+  assert.deepEqual(b.messages.map((m) => m.text), ['another idea', 'Answer for B.']);
+  assert.match(runs.at(-1).args[1], /You run TeamForge/, 'the second tab is briefed from scratch');
+  assert.equal(runs.at(-1).env.TEAMFORGE_TAB, 'tabB');
+
+  const stateOf = async (tab) => (await api('GET', `/api/state?project=${encodeURIComponent(p)}&tab=${tab}`)).body;
+  assert.equal((await stateOf('tabA')).session.title, 'first idea');
+  assert.equal((await stateOf('tabB')).session.title, 'another idea');
+  assert.equal((await stateOf('tabC')).empty, true);
+
+  // the mode belongs to the tab too
+  await api('POST', '/api/chat', { project_path: p, tab: 'tabB', text: '/spike' });
+  assert.equal((await tabHistory('tabB')).mode, 'spike');
+  assert.equal((await tabHistory('tabA')).mode, 'build');
+  assert.deepEqual((await tabHistory('tabA')).messages.map((m) => m.text), ['first idea', 'Answer for A.']);
+});
+
+test('one turn at a time per project: a second tab is told the team is busy elsewhere', async () => {
+  const p = project();
+  let release;
+  script = () => new Promise((r) => { release = r; });
+  await api('POST', '/api/chat', { project_path: p, tab: 'tabA', text: 'long work' });
+  const other = await api('POST', '/api/chat', { project_path: p, tab: 'tabB', text: 'me too' });
+  assert.equal(other.status, 409);
+  assert.match(other.body.error, /another TeamForge tab/);
+  const view = async (tab) => (await api('GET', `/api/chat?project=${encodeURIComponent(p)}&tab=${tab}`)).body;
+  assert.equal((await view('tabA')).running, true);
+  assert.equal((await view('tabB')).running, false, 'the other tab does not show a turn it does not own');
+  release();
+  for (let i = 0; i < 200 && (await view('tabA')).running; i += 1) await new Promise((r) => { setTimeout(r, 10); });
+});

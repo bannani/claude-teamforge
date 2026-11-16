@@ -58,24 +58,28 @@ export function createTeamforgeServer({
   const bridge = createBridge(); // commands for the TeamForge Chrome extension
   const briefed = new Set(); // agent conversation + role: charters already handed out
 
-  function snapshotFor(project) {
+  // The dashboard tab a request speaks for: each one has its own session.
+  const tabOf = (value) => (/^[\w-]{1,40}$/.test(String(value ?? '')) ? String(value) : '');
+
+  function snapshotFor(project, tab = '') {
     // A page opened for a project only ever shows that project's missions.
     const session = project
-      ? db.getActiveSession(project) || db.getLatestSessionFor(project)
+      ? db.getActiveSession(project, tab) || db.getLatestSessionFor(project, tab)
       : db.getLatestSession();
     return session ? db.snapshot(session.id) : { empty: true };
   }
 
   function broadcast() {
     for (const client of sseClients) {
-      client.res.write(`data: ${JSON.stringify(snapshotFor(client.project))}\n\n`);
+      client.res.write(`data: ${JSON.stringify(snapshotFor(client.project, client.tab))}\n\n`);
     }
   }
 
   // Chat traffic goes out as named SSE events, next to the default snapshots.
-  function emitChat(project, event) {
+  // tab: the conversation's own tab; left out for what concerns the whole project (permissions, models).
+  function emitChat(project, event, tab) {
     for (const client of sseClients) {
-      if (!client.project || client.project === project) {
+      if ((!client.project || client.project === project) && (tab === undefined || client.tab === tab)) {
         client.res.write(`event: chat\ndata: ${JSON.stringify({ project, ...event })}\n\n`);
       }
     }
@@ -146,16 +150,16 @@ export function createTeamforgeServer({
 
     if (req.method === 'PUT' && pathname === '/api/docs/file') {
       const saved = writeDoc(body.project_path, body.path, body.content, body.base_rev ?? null);
-      chat.docEdited(body.project_path, saved.path);
+      chat.docEdited(body.project_path, saved.path, tabOf(body.tab));
       return json(res, 200, saved);
     }
 
     if (req.method === 'GET' && pathname === '/api/chat') {
-      return json(res, 200, chat.history(url.searchParams.get('project') || ''));
+      return json(res, 200, chat.history(url.searchParams.get('project') || '', tabOf(url.searchParams.get('tab'))));
     }
 
     if (req.method === 'POST' && pathname === '/api/chat') {
-      chat.send(body.project_path, body.text, body.images);
+      chat.send(body.project_path, body.text, body.images, tabOf(body.tab));
       return json(res, 202, { ok: true });
     }
 
@@ -164,7 +168,7 @@ export function createTeamforgeServer({
     }
 
     if (req.method === 'POST' && pathname === '/api/grants') {
-      chat.grant(body.project_path, body.program);
+      chat.grant(body.project_path, body.program, tabOf(body.tab));
       return json(res, 201, { grants: db.listGrants(body.project_path) });
     }
 
@@ -179,7 +183,7 @@ export function createTeamforgeServer({
     }
 
     if (req.method === 'GET' && pathname === '/api/state') {
-      return json(res, 200, snapshotFor(url.searchParams.get('project')));
+      return json(res, 200, snapshotFor(url.searchParams.get('project'), tabOf(url.searchParams.get('tab'))));
     }
 
     if (req.method === 'GET' && pathname === '/api/decisions') {
@@ -287,7 +291,7 @@ export function createTeamforgeServer({
     }
 
     if (req.method === 'POST' && pathname === '/api/gate-check') {
-      const session = db.getActiveSession(body.project_path || '');
+      const session = db.getActiveSession(body.project_path || '', tabOf(body.tab));
       if (!session) return json(res, 200, { allow: true, reason: 'no active workflow' });
       const verdict = gateAllowsWrite(session.phase, body.file_path || '');
       if (!verdict.allow) {
@@ -335,9 +339,9 @@ export function createTeamforgeServer({
           'cache-control': 'no-cache',
           connection: 'keep-alive',
         });
-        const client = { res, project: url.searchParams.get('project') };
+        const client = { res, project: url.searchParams.get('project'), tab: tabOf(url.searchParams.get('tab')) };
         sseClients.add(client);
-        res.write(`data: ${JSON.stringify(snapshotFor(client.project))}\n\n`);
+        res.write(`data: ${JSON.stringify(snapshotFor(client.project, client.tab))}\n\n`);
         req.on('close', () => sseClients.delete(client));
         return;
       }

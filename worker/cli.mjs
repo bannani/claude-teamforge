@@ -55,7 +55,8 @@ async function api(method, path, body) {
 }
 
 async function activeSession() {
-  const state = await api('GET', `/api/state?project=${encodeURIComponent(PROJECT())}`);
+  // TEAMFORGE_TAB: the dashboard tab the running turn belongs to (set by the worker)
+  const state = await api('GET', `/api/state?project=${encodeURIComponent(PROJECT())}&tab=${encodeURIComponent(process.env.TEAMFORGE_TAB || '')}`);
   if (state.empty || !state.session || state.session.project_path !== PROJECT() || state.session.phase === 'done') {
     process.stderr.write(`teamforge: no active workflow session for ${PROJECT()} — run 'teamforge start' first\n`);
     process.exit(1);
@@ -214,7 +215,7 @@ async function main() {
     }
     case 'gate-check': {
       const verdict = await api('POST', '/api/gate-check', {
-        project_path: project, file_path: rest[0] || '',
+        project_path: project, file_path: rest[0] || '', tab: process.env.TEAMFORGE_TAB || '',
       });
       print(verdict);
       if (!verdict.allow) process.exit(2);

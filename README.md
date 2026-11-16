@@ -216,6 +216,14 @@ find the cause before fixing…). The agent does not get all of it up front: a
 playbook arrives when the team enters its phase, a charter when that employee
 first sits down to work. Edit a file and restart the worker to change the method.
 
+**One session per tab** — every TeamForge tab in your browser is its own session:
+a new tab starts with an empty conversation, its own mission (or spike) and its own
+mode, while the tab you came from keeps its work. Reloading a tab stays in its
+session. The team works on one tab's request at a time per project: another tab is
+told to wait. What you allowed (`/allow`, `/browser`, models) is shared by the
+project's tabs. A tab you close for good takes its session out of reach — the data
+stays in the database, but no tab shows it any more.
+
 **Memory** — decisions you approve are kept per project in SQLite and given to
 the company at the start of every later mission.
 

@@ -47,20 +47,26 @@ export function openDb(path = DEFAULT_DB_PATH) {
   if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'kind')) {
     db.exec("ALTER TABLE sessions ADD COLUMN kind TEXT NOT NULL DEFAULT 'mission'");
   }
-  // A project shows one kind at a time, chosen by its mode; the other kind's session waits.
-  const kindFor = (project_path) => (db.prepare(
-    "SELECT value FROM project_settings WHERE project_path = ? AND key = 'mode'",
-  ).get(project_path)?.value === 'spike' ? 'spike' : 'mission');
+  // Added in 1.4: each TeamForge tab in the browser has its own session ('' = no tab: the CLI, old sessions).
+  if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'tab')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN tab TEXT NOT NULL DEFAULT ''");
+  }
+  // A tab shows one kind at a time, chosen by its mode; the other kind's session waits.
+  const modeKey = (tab) => (tab ? `mode:${tab}` : 'mode');
+  const modeOf = (project_path, tab = '') => (db.prepare(
+    'SELECT value FROM project_settings WHERE project_path = ? AND key = ?',
+  ).get(project_path, modeKey(tab))?.value === 'spike' ? 'spike' : 'build');
+  const kindFor = (project_path, tab) => (modeOf(project_path, tab) === 'spike' ? 'spike' : 'mission');
 
   const touch = (id) => db.prepare(
     "UPDATE sessions SET updated_at = datetime('now') WHERE id = ?",
   ).run(id);
 
   return {
-    createSession({ project_path, project_name = '', title = '', kind = 'mission' }) {
+    createSession({ project_path, project_name = '', title = '', kind = 'mission', tab = '' }) {
       const { lastInsertRowid: id } = db.prepare(
-        'INSERT INTO sessions(project_path, project_name, title, kind) VALUES(?,?,?,?)',
-      ).run(project_path, project_name, title, kind === 'spike' ? 'spike' : 'mission');
+        'INSERT INTO sessions(project_path, project_name, title, kind, tab) VALUES(?,?,?,?,?)',
+      ).run(project_path, project_name, title, kind === 'spike' ? 'spike' : 'mission', String(tab || ''));
       const seed = db.prepare('INSERT INTO agents(session_id, role) VALUES(?,?)');
       for (const role of ROLES) seed.run(id, role);
       return this.getSession(Number(id));
@@ -70,15 +76,19 @@ export function openDb(path = DEFAULT_DB_PATH) {
       return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id);
     },
 
-    getActiveSession(project_path) {
+    // build or spike, for one tab of a project
+    modeOf,
+    setMode(project_path, tab, mode) { this.setSetting(project_path, modeKey(tab), mode === 'spike' ? 'spike' : null); },
+
+    getActiveSession(project_path, tab = '') {
       return db.prepare(
-        "SELECT * FROM sessions WHERE project_path = ? AND kind = ? AND phase != 'done' ORDER BY id DESC LIMIT 1",
-      ).get(project_path, kindFor(project_path));
+        "SELECT * FROM sessions WHERE project_path = ? AND tab = ? AND kind = ? AND phase != 'done' ORDER BY id DESC LIMIT 1",
+      ).get(project_path, tab, kindFor(project_path, tab));
     },
 
-    getLatestSessionFor(project_path) {
-      return db.prepare('SELECT * FROM sessions WHERE project_path = ? AND kind = ? ORDER BY id DESC LIMIT 1')
-        .get(project_path, kindFor(project_path));
+    getLatestSessionFor(project_path, tab = '') {
+      return db.prepare('SELECT * FROM sessions WHERE project_path = ? AND tab = ? AND kind = ? ORDER BY id DESC LIMIT 1')
+        .get(project_path, tab, kindFor(project_path, tab));
     },
 
     setAgentSession(id, agent_session) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer } from 'react';
+import { TAB } from './tab.js';
 
 // The conversation with the company: saved transcript + live chat events.
 
@@ -65,7 +66,7 @@ export function useChat(project) {
 
   useEffect(() => {
     if (!project) return;
-    fetch(`/api/chat?project=${encodeURIComponent(project)}`)
+    fetch(`/api/chat?project=${encodeURIComponent(project)}&tab=${TAB}`)
       .then((r) => r.json())
       .then((h) => dispatch({ type: 'loaded', messages: h.messages || [], running: !!h.running, grants: h.grants || [], allowAll: !!h.allowAll, browser: h.browser, browserKind: h.browserKind, mode: h.mode, model: h.model, models: h.models }))
       .catch(() => {});
@@ -73,7 +74,7 @@ export function useChat(project) {
 
   const send = useCallback(async (text, images = []) => {
     try {
-      const res = await post('/api/chat', { project_path: project, text, images: images.length ? images : undefined });
+      const res = await post('/api/chat', { project_path: project, tab: TAB, text, images: images.length ? images : undefined });
       if (res.ok) return true;
       const body = await res.json().catch(() => ({}));
       dispatch({ type: 'notice', text: body.error || `The worker refused the message (${res.status}).` });
@@ -87,7 +88,7 @@ export function useChat(project) {
 
   const allow = useCallback(async (program) => {
     try {
-      const res = await post('/api/grants', { project_path: project, program });
+      const res = await post('/api/grants', { project_path: project, tab: TAB, program });
       const body = await res.json().catch(() => ({}));
       if (res.ok) dispatch({ type: 'granted', grants: body.grants || [] });
       else dispatch({ type: 'notice', text: body.error || 'Could not allow that program.' });
