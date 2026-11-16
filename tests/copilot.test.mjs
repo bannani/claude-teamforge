@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildArgs, isProgramName, runCopilot } from '../worker/providers/copilot.mjs';
+import { ISOLATED_ENV, buildArgs, isProgramName, parseMcpList, runCopilot } from '../worker/providers/copilot.mjs';
 
 const FAKE = join(fileURLToPath(new URL('.', import.meta.url)), 'helpers', 'fake-copilot.mjs');
 const allowed = (args) => args.slice(args.indexOf('--allow-tool') + 1);
@@ -95,3 +95,27 @@ test('attachments are passed before the permission list', () => {
   assert.deepEqual(args.filter((a, i) => args[i - 1] === '--attachment'), ['/a/1.png', '/a/2.png']);
   assert.ok(args.lastIndexOf('--attachment') < args.indexOf('--allow-tool'));
 });
+
+test('a turn does not load the user\'s own plugins and MCP servers', () => {
+  const listed = parseMcpList(`User servers:
+  jenkins (http)
+  zeroheight (http)
+
+Plugin servers:
+  atlassian (http)
+  playwright (local)
+
+Builtin servers:
+  browser-use (local)
+  github-mcp-server (http)
+`);
+  assert.deepEqual(listed, ['jenkins', 'zeroheight', 'browser-use', 'github-mcp-server'], 'plugin servers go with the plugins');
+  assert.deepEqual(parseMcpList('No MCP servers configured.'), []);
+  assert.equal(ISOLATED_ENV.COPILOT_PLUGIN_DIR_ONLY, 'true');
+  const args = buildArgs({ prompt: 'p', sessionId: 's', writeOpen: false, browser: '@/x.json', otherMcp: ['jenkins', 'browser', 'bad name;rm'] });
+  assert.ok(args.includes('--disable-builtin-mcps'));
+  const off = args.flatMap((a, i) => (a === '--disable-mcp-server' ? [args[i + 1]] : []));
+  assert.deepEqual(off, ['jenkins'], 'never the team\'s own browser server, never a name that is not one');
+  assert.equal(args.at(-allowedCount(args) - 1), '--allow-tool');
+});
+const allowedCount = (args) => args.length - args.indexOf('--allow-tool') - 1;

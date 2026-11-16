@@ -49,6 +49,12 @@ installed and signed in. TeamForge never reads its token. Providers with API key
 (Anthropic, OpenAI, GitHub Models) are specified in
 `docs/specs/2026-11-12-standalone-webapp-design.md` and not built yet.
 
+**A lean turn** — each turn is a fresh `copilot` process. TeamForge starts it without
+your own Copilot plugins and MCP servers: the team cannot use them (TeamForge decides
+its tools), and loading them was paid on every turn — measured on a one-word turn,
+8.5 s and 34k input tokens with them, 4.4 s and 24k without. Your own Copilot
+sessions are not affected.
+
 **Permissions** — the agent's tools depend on the phase:
 
 | Phase | The agent may |

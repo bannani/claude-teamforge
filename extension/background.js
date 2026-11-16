@@ -222,8 +222,7 @@ async function run({ tool, args = {}, sites = [] }) {
       if (!origin) throw new Error(`Not a web address: ${args.url}`);
       // refused before anything is sent to that site
       if (!sites.includes(origin)) throw new Error(`${origin} is not a site the client allowed (allowed: ${sites.join(', ')}). The client allows it with /browser ${origin}.`);
-      await chrome.tabs.update(tabId, { active: true });
-      const out = await cdp(tabId, 'Page.navigate', { url: args.url });
+      const out = await cdp(tabId, 'Page.navigate', { url: args.url }); // in the background: the client stays where they are
       if (out.errorText) throw new Error(`The page did not open: ${out.errorText}`);
       await settle(tabId);
       await stayOnSites(tabId, sites); // a redirect may have left the allowed sites
@@ -291,12 +290,18 @@ async function run({ tool, args = {}, sites = [] }) {
       return { text: `Waited ${seconds} s.` };
     }
     case 'browser_take_screenshot': {
-      await chrome.tabs.update(tabId, { active: true }); // Chrome only paints the tab in front
       await inPage(tabId, 'window.__teamforge.busy()');
       const { cssVisualViewport: view } = await cdp(tabId, 'Page.getLayoutMetrics');
       // at most 1280 px wide: enough to read, a fraction of the cost for the model
       const clip = { x: view.pageX, y: view.pageY, width: view.clientWidth, height: view.clientHeight, scale: Math.min(1, 1280 / view.clientWidth) };
-      const shot = await cdp(tabId, 'Page.captureScreenshot', { format: 'png', clip });
+      const capture = () => cdp(tabId, 'Page.captureScreenshot', { format: 'png', clip });
+      // Taken in the background so the client keeps the tab they are on. Chrome may not
+      // paint a tab that is not in front: then, and only then, the tab is brought forward.
+      let shot = await Promise.race([capture(), sleep(4000).then(() => null)]);
+      if (!shot) {
+        await chrome.tabs.update(tabId, { active: true });
+        shot = await capture();
+      }
       return { text: `Screenshot of ${(await chrome.tabs.get(tabId)).url}.`, image: shot.data };
     }
     default:

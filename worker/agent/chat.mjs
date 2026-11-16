@@ -5,7 +5,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { basename, delimiter, dirname, join, relative, sep } from 'node:path';
-import { buildArgs, isProgramName, runCopilot } from '../providers/copilot.mjs';
+import { ISOLATED_ENV, buildArgs, isProgramName, runCopilot } from '../providers/copilot.mjs';
 import { isWriteOpen } from '../state-machine.mjs';
 import { SPIKE_REMINDER, coordinatorPrompt, spikePrompt } from './prompt.mjs';
 import { ANYTIME, helpText, isCommand, parseCommand } from './commands.mjs';
@@ -27,6 +27,7 @@ const ROLE = Object.fromEntries(ROLE_CATALOG.map((r) => [r.id, r]));
 export function createChat({
   db, broadcast, emit, provider, run = runCopilot, binDir, baseUrl, token = '', attachDir,
   extensionConnected = () => true, // is the TeamForge Chrome extension polling the worker?
+  otherMcp = async () => [],       // the user's own MCP servers, switched off for the team's turns
 }) {
   const turns = new Map(); // project path → { abort, queue }
 
@@ -182,10 +183,12 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
           prompt, sessionId: session.agent_session, model, readOnly: spike,
           writeOpen, grants: db.listGrants(project), allowAll: allowAll(project),
           attachments: images.map((i) => i.path), browser: browserArg, agentDirs,
+          otherMcp: await otherMcp().catch(() => []),
         }),
         cwd: project,
         env: {
           ...process.env,
+          ...ISOLATED_ENV,
           PATH: `${binDir}${delimiter}${process.env.PATH || ''}`,
           TEAMFORGE_URL: baseUrl(), TEAMFORGE_TOKEN: token, TEAMFORGE_PROJECT: project, TEAMFORGE_TAB: tab,
         },

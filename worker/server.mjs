@@ -12,6 +12,7 @@ import { DEPARTMENTS, ROLE_CATALOG } from './roles.mjs';
 import { createAuth, loadOrCreateToken } from './auth.mjs';
 import { resolveProvider } from './config.mjs';
 import { ChatError, createChat } from './agent/chat.mjs';
+import { otherMcpServers } from './providers/copilot.mjs';
 import { COMMANDS } from './agent/commands.mjs';
 import { charter, skill } from './agent/skills.mjs';
 import { createBridge } from './browser/bridge.mjs';
@@ -358,6 +359,8 @@ export function createTeamforgeServer({
   const chat = createChat({
     db, broadcast, emit: emitChat, provider, run, token, attachDir,
     extensionConnected: () => bridge.connected(),
+    // only the real provider is asked; a test's stand-in agent has no servers to list
+    otherMcp: run ? async () => [] : () => otherMcpServers(),
     binDir: join(ROOT, 'worker', 'bin'),
     baseUrl: () => `http://127.0.0.1:${server.address().port}`,
   });

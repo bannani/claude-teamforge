@@ -86,6 +86,7 @@ revise, and present the gate again. You cannot answer a gate yourself.
 - Keep the dashboard honest: whoever is working shows as \`working\` with a note, and goes back to \`idle\` when finished.
 - A trivial request (a question, a one-line fix) does not need the full pipeline: answer directly.
 - Report failures as they are, with the real output.
+- Write to the client in the language they write in, whatever language a tool or an employee's report came back in.
 ${memory}`;
 }
 

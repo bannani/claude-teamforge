@@ -2,7 +2,7 @@
 // session id. Copilot runs its own tools; TeamForge decides which ones it may
 // use (the write lock is a permission list) and turns its JSONL into chat events.
 
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { DOCS } from '../docs.mjs';
 import { roleOfAgent } from '../agent/team.mjs';
@@ -22,7 +22,7 @@ const BASE_ALLOW = ['shell(teamforge:*)', ...DOC_FILES.map((f) => `write(${f})`)
 
 export const isProgramName = (s) => typeof s === 'string' && /^[A-Za-z0-9][\w.+-]{0,63}$/.test(s);
 
-export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, grants = [], allowAll = false, model = null, attachments = [], browser = null, agentDirs = [] }) {
+export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, grants = [], allowAll = false, model = null, attachments = [], browser = null, agentDirs = [], otherMcp = [] }) {
   // browser: the --additional-mcp-config value (an `@file`) when the client opened a browser
   // readOnly (spike mode) wins over everything: no write, no granted program, no /allow-all.
   const allow = readOnly ? [...READ_ALLOW] : [...BASE_ALLOW];
@@ -45,12 +45,45 @@ export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, gran
     '--no-color', '--no-custom-instructions', '--no-ask-user',
     '--session-id', sessionId,
     ...(model ? ['--model', model] : []),
+    // The user's own MCP servers are of no use here — their tools are not allowed — but each
+    // one costs start-up time and prompt tokens on every turn (see ISOLATED_ENV).
+    '--disable-builtin-mcps', ...otherMcp.filter(isServerName).flatMap((name) => ['--disable-mcp-server', name]),
     ...attachments.flatMap((path) => ['--attachment', path]),
     // directories whose .github/agents Copilot loads: agents TeamForge keeps outside the project
     ...agentDirs.flatMap((dir) => ['--add-dir', dir]),
     ...(browser ? ['--additional-mcp-config', browser, '--deny-tool', ...BROWSER_DENIED.map((t) => `${BROWSER_SERVER}(${t})`)] : []),
     '--allow-tool', ...allow, // variadic: must stay last
   ];
+}
+
+const isServerName = (s) => typeof s === 'string' && /^[\w.-]{1,64}$/.test(s) && s !== BROWSER_SERVER;
+
+// A turn is a fresh `copilot` process, and by default it loads everything the user
+// set up for their own sessions: plugins, their hooks, a dozen MCP servers. None of
+// it can be used by the team (TeamForge decides the tools), and it is paid on every
+// turn — measured on a one-word turn: 8.5 s and 34k input tokens with it, 4.4 s and
+// 24k without. So plugins are not discovered, and the MCP servers are switched off.
+export const ISOLATED_ENV = { COPILOT_PLUGIN_DIR_ONLY: 'true' };
+
+// The MCP servers Copilot would start: `copilot mcp list` prints "  name (type)" under
+// a heading per source. Plugin servers go with the plugins; the others are named here.
+export function parseMcpList(text) {
+  const names = [];
+  let plugin = false;
+  for (const line of String(text || '').split('\n')) {
+    if (/^\S.*:\s*$/.test(line)) { plugin = /^plugin/i.test(line); continue; }
+    const name = /^\s+([\w.-]+)\s+\(/.exec(line)?.[1];
+    if (name && !plugin && isServerName(name)) names.push(name);
+  }
+  return [...new Set(names)];
+}
+
+let mcpList = null; // asked once per worker
+export function otherMcpServers(bin = 'copilot') {
+  mcpList ??= new Promise((resolve) => {
+    execFile(bin, ['mcp', 'list'], { timeout: 15000, env: { ...process.env, ...ISOLATED_ENV } }, (err, stdout) => resolve(err ? [] : parseMcpList(stdout)));
+  });
+  return mcpList;
 }
 
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
