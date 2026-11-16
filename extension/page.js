@@ -71,7 +71,9 @@
           if (child.matches(ACTIONABLE)) {
             if (shown(child)) { refs.push(child); add(`[${refs.length}] ${role(child)} "${name(child)}"${state(child)}`); }
           } else if (/^H[1-6]$/.test(child.tagName)) {
-            add(`heading(${child.tagName[1]}) "${clean(child.innerText, 200)}"`);
+            // a heading can be pointed at too (hovering a title, checking where it is)
+            refs.push(child);
+            add(`[${refs.length}] heading(${child.tagName[1]}) "${clean(child.innerText, 200)}"`);
           } else {
             walk(child);
             if (child.shadowRoot) walk(child.shadowRoot);
@@ -83,8 +85,9 @@
   }
 
   function element(ref) {
-    const el = refs[Number(ref) - 1];
-    if (!el || !el.isConnected) throw new Error(`No element ${ref} on the page any more: take a new snapshot.`);
+    const el = /^\d+$/.test(String(ref).trim()) ? refs[Number(ref) - 1] : null;
+    if (!el) throw new Error(`"${ref}" is not an element number. Pass the number shown in brackets in the last snapshot, e.g. 12 for "[12] button …".`);
+    if (!el.isConnected) throw new Error(`Element ${ref} is not on the page any more: take a new snapshot.`);
     return el;
   }
   // Scrolls the element into view and gives the point to act on.
@@ -92,7 +95,8 @@
     const el = element(ref);
     el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
     const r = el.getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), label: `${role(el)} "${name(el)}"` };
+    const what = /^H[1-6]$/.test(el.tagName) ? 'heading' : role(el);
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), label: `${what} "${name(el)}"` };
   }
   function focus(ref) {
     const el = element(ref);

@@ -81,6 +81,7 @@ async function scripts() {
   }
   return sources;
 }
+// (kept for as long as the service worker lives: reload the extension after editing page.js or overlay.js)
 
 async function cdp(tabId, method, params = {}) {
   if (!attached.has(tabId)) {

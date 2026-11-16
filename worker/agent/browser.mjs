@@ -171,7 +171,8 @@ task in the browser; you do it with the \`browser\` tools and report back.
     ? 'Observe only: navigate, read, hover, take screenshots. Never submit, save, delete or change anything.'
     : 'Do exactly what the task says — nothing more. Before a step that changes data (submit, save, delete), make sure the task asked for it.'}
 - Wait for a page to finish loading before you read it or take a screenshot.
-- Read with \`browser_snapshot\` — the elements you can act on carry a number to pass back as \`ref\`; take a screenshot (without a file name) when the task asks for one or when the look of the page matters.
+- Your tools are the ones of the \`browser\` server and no other: their names start with \`browser-\` (\`browser-browser_navigate\`, \`browser-browser_snapshot\`…). Ignore any other browser or Playwright tool you may see.
+- Read with \`browser_snapshot\` — headings and the elements you can act on carry a number in brackets: pass that number, and nothing else, as \`ref\`. Take a screenshot (without a file name) when the task asks for one or when the look of the page matters.
 - Never repeat a password or a token you see or type.
 
 Report in a few lines: what you did, what is on the screen that answers the task
