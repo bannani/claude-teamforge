@@ -53,9 +53,11 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   if (origin !== message.url || !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) return;
   chrome.storage.local.set({ url: origin, token: message.token }).then(loop);
 });
-// A click on the extension's icon opens TeamForge — or goes back to its tab when
-// one is already open. If the worker does not answer, a page says how to start it.
-chrome.action.onClicked.addListener(async () => {
+// A click on the extension's icon, from a web page: that page joins the TeamForge
+// tab group and becomes the tab the team works in, and TeamForge opens beside it
+// (or its tab comes back to the front). From anywhere else it just opens TeamForge.
+// If the worker does not answer, a page says how to start it.
+chrome.action.onClicked.addListener(async (current) => {
   const { url } = await settings();
   let up = false;
   try { up = (await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1500) })).ok; } catch { /* not running */ }
@@ -64,16 +66,34 @@ chrome.action.onClicked.addListener(async () => {
     await chrome.tabs.create({ url: chrome.runtime.getURL('popup.html') });
     return;
   }
-  const { tabId: teamTabId } = await chrome.storage.session.get('tabId');
-  const open = (await chrome.tabs.query({ url: `${url}/*` })).find((t) => t.id !== teamTabId);
-  if (open) {
-    await chrome.tabs.update(open.id, { active: true });
-    await chrome.windows.update(open.windowId, { focused: true });
-  } else {
-    await chrome.tabs.create({ url: `${url}/` });
+  const windowId = current?.windowId;
+  const isTeamForge = (tab) => !!tab?.url && tab.url.startsWith(`${url}/`);
+  const isWebPage = !!originOf(current?.url) && !isTeamForge(current);
+  if (isWebPage) {
+    await chrome.storage.session.set({ tabId: current.id }); // the team now works here
+    await joinGroup([current.id], windowId);
   }
+  const { tabId: teamTabId } = await chrome.storage.session.get('tabId');
+  let dashboard = isTeamForge(current) ? current : (await chrome.tabs.query({ url: `${url}/*` })).find((t) => t.id !== teamTabId);
+  if (dashboard) {
+    if (isWebPage && dashboard.windowId !== windowId) dashboard = await chrome.tabs.move(dashboard.id, { windowId, index: -1 });
+  } else {
+    dashboard = await chrome.tabs.create({ url: `${url}/`, ...(isWebPage ? { index: current.index + 1 } : {}) });
+  }
+  await joinGroup([dashboard.id], dashboard.windowId);
+  await chrome.tabs.update(dashboard.id, { active: true });
+  await chrome.windows.update(dashboard.windowId, { focused: true });
   loop(); // opening the page pairs the extension if it was not
 });
+
+// Puts tabs in the window's TeamForge group, creating it when there is none.
+async function joinGroup(tabIds, windowId) {
+  try {
+    const [group] = await chrome.tabGroups.query({ title: 'TeamForge', windowId });
+    const groupId = await chrome.tabs.group(group ? { tabIds, groupId: group.id } : { tabIds, createProperties: { windowId } });
+    if (!group) await chrome.tabGroups.update(groupId, { title: 'TeamForge', color: 'cyan' });
+  } catch { /* a window without tab groups */ }
+}
 
 chrome.runtime.onInstalled.addListener(() => { chrome.alarms.create('wake', { periodInMinutes: 0.5 }); loop(); });
 chrome.runtime.onStartup.addListener(() => { chrome.alarms.create('wake', { periodInMinutes: 0.5 }); loop(); });
@@ -88,10 +108,7 @@ async function teamTab() {
   const { tabId } = await chrome.storage.session.get('tabId');
   if (tabId) { try { return await chrome.tabs.get(tabId); } catch { /* the client closed it */ } }
   const tab = await chrome.tabs.create({ url: 'about:blank', active: true });
-  try {
-    const groupId = await chrome.tabs.group({ tabIds: tab.id });
-    await chrome.tabGroups.update(groupId, { title: 'TeamForge', color: 'cyan' });
-  } catch { /* a window without tab groups */ }
+  await joinGroup([tab.id], tab.windowId);
   await chrome.storage.session.set({ tabId: tab.id });
   return tab;
 }
@@ -193,6 +210,12 @@ async function key(tabId, name) {
 async function run({ tool, args = {}, sites = [] }) {
   const tab = await teamTab();
   const tabId = tab.id;
+  // The client can hand the team any tab with a click on the extension: the team
+  // still only reads and acts on the sites they allowed.
+  const here = originOf(tab.url);
+  if (tool !== 'browser_navigate' && here && !sites.includes(here)) {
+    throw new Error(`The TeamForge tab is on ${here}, a site the client has not allowed, so it was not read or touched. The client allows it with /browser ${here}.`);
+  }
   switch (tool) {
     case 'browser_navigate': {
       const origin = originOf(args.url);

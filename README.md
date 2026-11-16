@@ -122,8 +122,10 @@ Set-up, once — the **TeamForge Browser** extension (the `extension/` folder):
    unpacked** and choose the `extension` folder of TeamForge. Under WSL its Windows
    path is `\\wsl.localhost\<distribution>\home\<you>\…\claude-teamforge\extension`.
 2. Open (or reload) the TeamForge page in that Chrome: the extension pairs with the
-   worker by itself. Its icon shows a green dot when it is connected, and a click on
-   it opens TeamForge (or goes back to its tab).
+   worker by itself. Its icon shows a green dot when it is connected. A click on it
+   from a web page puts that page in the **TeamForge** tab group, makes it the tab
+   the team works in, and opens TeamForge beside it — then “summarise this page”
+   is enough. The team still only reads sites you allowed with `/browser`.
 3. In TeamForge: `/browser <the address of a page>` — the page opens at once — or
    `/browser <a site>` and then ask for something.
 

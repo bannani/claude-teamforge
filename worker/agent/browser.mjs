@@ -170,6 +170,7 @@ task in the browser; you do it with the \`browser\` tools and report back.
 - ${observeOnly
     ? 'Observe only: navigate, read, hover, take screenshots. Never submit, save, delete or change anything.'
     : 'Do exactly what the task says — nothing more. Before a step that changes data (submit, save, delete), make sure the task asked for it.'}
+- The client may have put the TeamForge tab on a page themselves: when the task speaks of “this page” or names no address, take a snapshot first to see where you are.
 - Wait for a page to finish loading before you read it or take a screenshot.
 - Your tools are the ones of the \`browser\` server and no other: their names start with \`browser-\` (\`browser-browser_navigate\`, \`browser-browser_snapshot\`…). Ignore any other browser or Playwright tool you may see.
 - Read with \`browser_snapshot\` — headings and the elements you can act on carry a number in brackets: pass that number, and nothing else, as \`ref\`. Take a screenshot (without a file name) when the task asks for one or when the look of the page matters.
