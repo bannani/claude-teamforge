@@ -16,6 +16,7 @@ import { otherMcpServers } from './providers/copilot.mjs';
 import { COMMANDS } from './agent/commands.mjs';
 import { charter, skill } from './agent/skills.mjs';
 import { createBridge } from './browser/bridge.mjs';
+import { createGraphs } from './agent/graph.mjs';
 import { TOOL_NAMES } from './browser/tools.mjs';
 import { DocError, listDocs, readDoc, writeDoc } from './docs.mjs';
 import { AttachmentError, MAX_IMAGES, MAX_IMAGE_BYTES, readAttachment } from './attachments.mjs';
@@ -52,6 +53,7 @@ function readBody(req) {
 export function createTeamforgeServer({
   dbPath = DEFAULT_DB_PATH, distDir = DIST, token = '', provider = resolveProvider, run,
   defaultProject = process.cwd(), attachDir = join(dirname(dbPath), 'attachments'),
+  graphs, // the code maps of spikes (graph.mjs); a test's stand-in agent gets none unless it asks
 } = {}) {
   const db = openDb(dbPath);
   const auth = token ? createAuth(token) : null;
@@ -364,24 +366,30 @@ export function createTeamforgeServer({
     }
   });
 
+  // a test's stand-in agent gets no code map unless the test brings one
+  const maps = graphs ?? (run ? { prepare: async () => ({ graph: null, ok: false, line: 'no code map in tests' }), status: () => 'no code map in tests', stopAll() {} } : createGraphs());
   const chat = createChat({
     db, broadcast, emit: emitChat, provider, run, token, attachDir,
     extensionConnected: () => bridge.connected(),
     // only the real provider is asked; a test's stand-in agent has no servers to list
     otherMcp: run ? async () => [] : () => otherMcpServers(),
+    graphs: maps,
     binDir: join(ROOT, 'worker', 'bin'),
     baseUrl: () => `http://127.0.0.1:${server.address().port}`,
   });
-  server.on('close', () => { chat.stopAll(); bridge.stop(); });
+  server.on('close', () => { chat.stopAll(); bridge.stop(); maps.stopAll(); });
 
-  return { server, db, chat, bridge };
+  return { server, db, chat, bridge, graphs: maps };
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { server } = createTeamforgeServer({
+  const { server, graphs } = createTeamforgeServer({
     token: loadOrCreateToken(dirname(DEFAULT_DB_PATH)),
     defaultProject: process.env.TEAMFORGE_PROJECT || process.cwd(),
   });
+  // the graphify servers of the code maps go with the worker
+  process.once('exit', () => graphs.stopAll());
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => process.exit(0));
   server.listen(PORT, '127.0.0.1', () => {
     // lets a newer `teamforge` launcher replace this worker after an upgrade
     writeFileSync(join(dirname(DEFAULT_DB_PATH), 'worker.pid'), String(process.pid));

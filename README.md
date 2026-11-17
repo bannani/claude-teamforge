@@ -69,7 +69,29 @@ that project (`npm` can run any script) — allow only what you would run yourse
 **Spike mode** — for a Product Owner who wants to know how the product behaves
 today. Switch with the **Build / Spike** toggle in the console header (or `/spike`,
 `/build`), then ask a functional question: “What happens when a patient asks for a
-fourth refill?”. The CTO reads the code, the Business Analyst answers:
+fourth refill?”. Two employees answer, each on the model that suits the job:
+
+- the **Business Analyst** leads the investigation on a light model
+  (`claude-haiku-5.5`): reading code is most of the tokens of a spike;
+- before answering, they consult the **CTO**, an advisor on a stronger model
+  (`claude-sonnet-5.5`), who checks the decisive points in the code and corrects
+  the analysis — a wrong interpretation, a missing case, an overstated confidence.
+  The console shows the CTO at work while they are consulted;
+- `/spike model <name>` and `/spike advisor <name>` choose other models
+  (`default` goes back);
+- the code is first **mapped with [graphify](https://pypi.org/project/graphifyy/)**:
+  files, functions and who calls whom, so the team starts from a map instead of
+  searching blind. It is a local code-only pass (no LLM, no API key), kept in
+  TeamForge's data directory — nothing is written in your project. The map is built
+  in the background and read through graphify's MCP server, which keeps it in
+  memory: a small project is ready for the first question; a large one (thousands
+  of files) takes a few minutes the first time, and the questions asked meanwhile
+  are answered without it. It is brought up to date (only the files that changed)
+  when it is more than an hour old, and its server stops after 30 minutes without a
+  spike. Install it with `uv tool install 'graphifyy[mcp]'`; without it, the spike
+  works as before.
+
+What the client gets:
 
 - the answer is always **functional** — rules, conditions, cases, an example, and
   how sure the team is — with no file, class or table name;
@@ -109,6 +131,7 @@ what you allowed, and whether the TeamForge extension is connected.
 | `/new` | close the current mission; the next message starts a new one |
 | `/export` | spike mode: save the questions and answers to `docs/spikes/` |
 | `/spike` · `/build` | switch to spike mode (read-only questions about the code), or back to the mission |
+| `/spike model\|advisor <name>` | the models of a spike: the analyst (`claude-haiku-5.5`) and the CTO who advises (`claude-sonnet-5.5`) |
 | `/permissions` | what the agent may run in this project |
 | `/allow <program>` · `/deny <program>` | let the agent run a program, or take it back |
 | `/allow-all` · `/allow-all off` | let the agent run **any** shell command from the implementation phase |

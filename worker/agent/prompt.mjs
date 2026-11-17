@@ -5,6 +5,8 @@ import { DEPARTMENTS, ROLE_CATALOG } from '../roles.mjs';
 import { PHASES } from '../state-machine.mjs';
 import { DOC_FILES } from '../providers/copilot.mjs';
 import { skill } from './skills.mjs';
+import { graphBriefing } from './graph.mjs';
+import { ADVISOR_MODEL, advisorBriefing } from './spike-team.mjs';
 
 function companyTable() {
   const dept = Object.fromEntries(DEPARTMENTS.map((d) => [d.id, d.name]));
@@ -94,8 +96,14 @@ ${memory}`;
 // Same marker as dashboard/src/spike.js, which folds everything after it.
 export const TECH_MARKER = '===TECHNICAL===';
 
-export const SPIKE_REMINDER = `(Spike mode, read-only: the functional answer first, then a line \`${TECH_MARKER}\`, then the technical detail.)`;
+export const SPIKE_REMINDER = `(Spike mode, read-only: start from the code map when you have one, consult your advisor before a real answer, then the functional answer first, a line \`${TECH_MARKER}\`, and the technical detail.)`;
 
-export function spikePrompt({ project }) {
-  return `${skill('spike').replaceAll('{{project}}', project).replaceAll('{{marker}}', TECH_MARKER)}\n`;
+// graph: whether the code map is loaded for this turn. advisorModel: the CTO's model.
+export function spikePrompt({ project, graph = false, advisorModel = ADVISOR_MODEL }) {
+  return `${skill('spike')
+    .replaceAll('{{project}}', project)
+    .replaceAll('{{marker}}', TECH_MARKER)
+    .replace('{{graph}}', graph ? graphBriefing() : '')
+    .replace('{{advisor}}', advisorBriefing(advisorModel))
+    .replace(/\n{3,}/g, '\n\n')}\n`;
 }

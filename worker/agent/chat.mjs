@@ -14,6 +14,8 @@ import { decodeImages, storeImages } from '../attachments.mjs';
 import { ROLE_CATALOG } from '../roles.mjs';
 import { agentName, isModelName, syncAgentFiles } from './team.mjs';
 import { saveSpikeReport } from './spike-report.mjs';
+import { createGraphs, graphBriefing, writeGraphConfig } from './graph.mjs';
+import { ADVISOR_MODEL, SPIKE_MODEL, writeAdvisor } from './spike-team.mjs';
 import { BROWSER_AGENT, BROWSER_MODEL, needsHeadless, newScreenshots, parseSite, writeBrowserAgent, writeBrowserConfig } from './browser.mjs';
 
 export class ChatError extends Error {
@@ -28,6 +30,7 @@ export function createChat({
   db, broadcast, emit, provider, run = runCopilot, binDir, baseUrl, token = '', attachDir,
   extensionConnected = () => true, // is the TeamForge Chrome extension polling the worker?
   otherMcp = async () => [],       // the user's own MCP servers, switched off for the team's turns
+  graphs = createGraphs(),         // the code maps spikes start from (graph.mjs)
 }) {
   const turns = new Map(); // project path → { abort, queue }
 
@@ -48,6 +51,10 @@ export function createChat({
   // the model that reads the screen: the browser operator's
   const browserModel = (project) => db.getSetting(project, 'browser_model') || BROWSER_MODEL;
   const modelFor = (project) => db.getSetting(project, 'model') || provider().model || null;
+  // a spike: the analyst who reads on a light model, the CTO who advises on a stronger one
+  const spikeModel = (project) => db.getSetting(project, 'spike_model') || SPIKE_MODEL;
+  const advisorModel = (project) => db.getSetting(project, 'advisor_model') || ADVISOR_MODEL;
+  const mapBriefed = new Set(); // spike sessions whose agent was told how to use the code map
   // The company's model, and the employees who have one of their own.
   const modelsOf = (project) => ({ default: modelFor(project), roles: db.listSettings(project, 'model:') });
   function setModel(project, role, model) {
@@ -58,6 +65,11 @@ export function createChat({
     db.setSetting(project, role && role !== 'ceo' ? `model:${role}` : 'model', model);
     emit(project, { type: 'models', models: modelsOf(project) });
     return modelsOf(project);
+  }
+
+  function spikeTeam(project) {
+    const map = graphs.status(project);
+    return `The Business Analyst investigates on \`${spikeModel(project)}\`, the CTO advises on \`${advisorModel(project)}\`; ${map}.`;
   }
 
   // A line from TeamForge itself (command replies, notices): shown in the
@@ -85,7 +97,6 @@ export function createChat({
   async function runTurn(project, text, decoded = [], tab = '') {
     const tell = (event) => emit(project, event, tab); // to the tab this turn belongs to
     const { provider: name } = provider();
-    const model = modelFor(project);
     let session = sessionFor(project, text, tab);
     const images = storeImages(attachDir, session.id, decoded);
     const shown = images.map(({ file, name: label }) => ({ file, name: label }));
@@ -95,6 +106,7 @@ export function createChat({
 
     // A spike touches nothing in the project: no agent files, no docs/ folder.
     const spike = session.kind === 'spike';
+    const model = spike ? spikeModel(project) : modelFor(project);
 
     // Employees with their own model become real sub-agents for this turn.
     let staffed = [];
@@ -134,8 +146,22 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
     const browsing = !browser ? '' : spike
       ? `\n\n[You can use ${where}, on ${sites.join(', ')} (the \`browser\` tools). Look at the running product to confirm what the code says. Observe only — never submit, save or delete anything in it. ${operator} Stay on these sites: opening another one ends your turn.]`
       : `\n\n[You can use ${where}, on ${sites.join(', ')} (the \`browser\` tools: navigate, snapshot, click, type, screenshot). Use it to see and test the running product: QA checks the acceptance criteria in it, the Designer checks the screens. Say in one line what you are about to do before acting in it. ${operator} The client sees its screenshots in the console. Stay on these sites: opening another one ends your turn.]`;
+    // The code map a spike starts from (graph.mjs): built and loaded in the background;
+    // a question waits for it a little, and otherwise goes on without it.
+    let graph = null;
+    if (spike) {
+      tell({ type: 'tool_start', id: 'graph', name: 'graphify', summary: 'opens the map of the code', role: null });
+      const map = await graphs.prepare(project, join(dataDir, 'graph')).catch((err) => ({ graph: null, ok: false, line: `no code map — ${err?.message || err}` }));
+      graph = map.graph;
+      const tool = { name: 'graphify', ok: map.ok, denied: false, path: null, program: null, summary: map.line };
+      db.addMessage(session.id, 'tool', tool);
+      tell({ type: 'tool_end', id: 'graph', ...tool, error: null });
+    }
+    // how to use the map, once per conversation: the first turn, or the first one that has it
+    const mapNote = graph && !first && !mapBriefed.has(session.id) ? `\n\n${graphBriefing()}` : '';
+    if (graph) mapBriefed.add(session.id);
     const prompt = spike
-      ? (first ? `${spikePrompt({ project })}\n# The client's question\n\n${text}${seen}${browsing}` : `${text}${seen}${browsing}\n\n${SPIKE_REMINDER}`)
+      ? (first ? `${spikePrompt({ project, graph: !!graph, advisorModel: advisorModel(project) })}\n# The client's question\n\n${text}${seen}${browsing}` : `${text}${seen}${browsing}${mapNote}\n\n${SPIKE_REMINDER}`)
       : first
       ? `${coordinatorPrompt({ project, decisions: db.approvedDecisions(project, 15) })}\n${standing}# The client's request\n\n${text}${seen}${notice}${team}${browsing}`
       : `${text}${seen}${notice}${team}${browsing}\n\n(Current workflow phase: ${session.phase}.)`;
@@ -147,7 +173,8 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
 
     // In a spike the agent has no reporting command: the worker seats the two
     // employees who answer, and sends them back when the turn ends.
-    const desk = spike ? [['architect', 'reading the code'], ['analyst', 'explaining it in business terms']] : [];
+    // The CTO sits down only when consulted: the advisor is a sub-agent of its own.
+    const desk = spike ? [['analyst', `investigating on ${model}`]] : [];
     const seat = (status) => {
       for (const [role, note] of desk) {
         db.upsertAgent(session.id, role, status, status === 'working' ? note : '');
@@ -178,12 +205,14 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         browserArg = writeBrowserConfig(join(dataDir, 'mcp.json'), browser);
         agentDirs.push(writeBrowserAgent(join(dataDir, 'agents-home'), { model: browserModel(project), sites, observeOnly: spike }));
       }
+      if (spike) agentDirs.push(writeAdvisor(join(dataDir, 'spike-home'), { model: advisorModel(project), graph: !!graph }));
       const { exitCode, stderr } = await run({
         args: buildArgs({
           prompt, sessionId: session.agent_session, model, readOnly: spike,
           writeOpen, grants: db.listGrants(project), allowAll: allowAll(project),
           attachments: images.map((i) => i.path), browser: browserArg, agentDirs,
           otherMcp: await otherMcp().catch(() => []),
+          graph: graph ? writeGraphConfig(join(dataDir, 'graph-mcp.json'), graph) : null,
         }),
         cwd: project,
         env: {
@@ -326,7 +355,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         const who = p.provider ? `${p.label}${model ? ` · ${model}` : ' · default model'}` : 'no model provider';
         if (modeOf(project) === 'spike') {
           const asked = session ? db.listMessages(session.id).filter((m) => m.role === 'user').length : 0;
-          return reply(`**Spike mode** — read-only${turns.has(project) ? ' — the team is reading the code' : ''}\n${asked ? `Questions asked: ${asked}` : 'No question yet'}\n${who}`);
+          return reply(`**Spike mode** — read-only${turns.has(project) ? ' — the team is reading the code' : ''}\n${asked ? `Questions asked: ${asked}` : 'No question yet'}\n${p.provider ? p.label : 'no model provider'} — ${spikeTeam(project)}`);
         }
         if (!session) return reply(`No active mission. ${who}.`);
         const snap = db.snapshot(session.id);
@@ -365,6 +394,17 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
       }
       case 'spike':
       case 'build': {
+        // /spike model|advisor <name|default>: who answers a spike
+        if (name === 'spike' && args.length) {
+          const [which, choice, ...extra] = args;
+          const key = { model: 'spike_model', advisor: 'advisor_model' }[which];
+          const usage = '`/spike model <name|default>` chooses the analyst\'s model, `/spike advisor <name|default>` the CTO\'s.';
+          if (!key) return reply(`Unknown option \`${which}\`. ${usage}`);
+          if (!choice || extra.length) return reply(`${spikeTeam(project)}\n${usage}`);
+          if (choice !== 'default' && !isModelName(choice)) return reply('That does not look like a model name.');
+          db.setSetting(project, key, choice === 'default' ? null : choice);
+          return reply(spikeTeam(project));
+        }
         if (modeOf(project) === name) return reply(`Already in ${name} mode.`);
         db.setMode(project, cmdTab, name);
         edited.delete(project);
@@ -373,7 +413,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
         emit(project, { type: 'mode', mode: name, messages: now ? db.listMessages(now.id) : [] }, cmdTab);
         broadcast();
         return reply(name === 'spike'
-          ? 'Spike mode. Ask how the product behaves today: the team reads the code — it cannot change anything — and answers in business terms. Open **Technical details** under an answer for the developer\'s view. `/build` goes back to your mission.'
+          ? `Spike mode. Ask how the product behaves today: the team reads the code — it cannot change anything — and answers in business terms. Open **Technical details** under an answer for the developer's view. \`/build\` goes back to your mission.\n${spikeTeam(project)}`
           : `Build mode. ${now ? `Your mission continues at phase \`${now.phase}\`.` : 'Your next message starts a mission.'} \`/spike\` goes back to your questions.`);
       }
       case 'export': {
@@ -388,7 +428,7 @@ This mission is already under way (phase: ${session.phase}). Before acting, run 
       case 'permissions': {
         const grants = db.listGrants(project);
         const web = sitesOf(project).length ? `\nBrowser: ${sitesOf(project).map((s) => `\`${s}\``).join(', ')} (\`/browser off\` to take it back).` : '';
-        if (modeOf(project) === 'spike') return reply(`Spike mode is read-only: the team reads the project and runs \`ls\`, \`cat\`, \`git status\`, \`git log\` and \`git diff\`. It cannot write a file or run a program, whatever is allowed in build mode.${web}`);
+        if (modeOf(project) === 'spike') return reply(`Spike mode is read-only: the team reads the project and runs \`ls\`, \`cat\`, \`git status\`, \`git log\`, \`git diff\` and reads its map of the code. It cannot write a file or run a program, whatever is allowed in build mode.${web}`);
         return reply([
           'Before the plan is approved: the four documents under `docs/` and read-only commands, whatever is allowed below.',
           allowAll(project)

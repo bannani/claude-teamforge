@@ -14,7 +14,10 @@ const EXCLUDE = '.github/agents/teamforge-*.agent.md';
 
 export const isModelName = (s) => typeof s === 'string' && /^[\w.:-]{1,64}$/.test(s);
 export const agentName = (roleId) => `${AGENT_PREFIX}${roleId}`;
+// agents that are not named after their employee: the spike's advisor is the CTO
+const ALIASES = { 'teamforge-advisor': 'architect' };
 export const roleOfAgent = (name) => {
+  if (ALIASES[name]) return ALIASES[name];
   const id = String(name || '').startsWith(AGENT_PREFIX) ? String(name).slice(AGENT_PREFIX.length) : null;
   return ROLE_CATALOG.some((r) => r.id === id) ? id : null;
 };

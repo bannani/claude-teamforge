@@ -6,7 +6,7 @@ export const COMMANDS = [
   { name: 'stop', usage: '/stop', about: 'Stop the running turn' },
   { name: 'clear', usage: '/clear', about: 'Clear the conversation and the agent\'s memory of it (mission, tasks and documents stay)' },
   { name: 'new', usage: '/new', about: 'Close the current mission; your next message starts a new one' },
-  { name: 'spike', usage: '/spike', about: 'Spike mode: ask how the product behaves today — read-only, a functional answer with the technical detail on demand' },
+  { name: 'spike', usage: '/spike [model|advisor <name|default>]', about: 'Spike mode: ask how the product behaves today — read-only, a functional answer with the technical detail on demand. The analyst reads on a light model, the CTO advises on a stronger one' },
   { name: 'export', usage: '/export', about: 'Spike mode: save the questions and answers to a document under docs/spikes/' },
   { name: 'build', usage: '/build', about: 'Back to build mode: the company works on your mission' },
   { name: 'permissions', usage: '/permissions', about: 'Show what the agent may run in this project' },

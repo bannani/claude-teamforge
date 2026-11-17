@@ -6,6 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { DOCS } from '../docs.mjs';
 import { roleOfAgent } from '../agent/team.mjs';
+import { GRAPH_SERVER, graphTools } from '../agent/graph.mjs';
 import { BROWSER_AGENT, BROWSER_DENIED, BROWSER_SERVER, browserAction } from '../agent/browser.mjs';
 
 // The documents the company may write before the plan is validated. Exact
@@ -22,7 +23,7 @@ const BASE_ALLOW = ['shell(teamforge:*)', ...DOC_FILES.map((f) => `write(${f})`)
 
 export const isProgramName = (s) => typeof s === 'string' && /^[A-Za-z0-9][\w.+-]{0,63}$/.test(s);
 
-export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, grants = [], allowAll = false, model = null, attachments = [], browser = null, agentDirs = [], otherMcp = [] }) {
+export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, grants = [], allowAll = false, model = null, attachments = [], browser = null, agentDirs = [], otherMcp = [], graph = null }) {
   // browser: the --additional-mcp-config value (an `@file`) when the client opened a browser
   // readOnly (spike mode) wins over everything: no write, no granted program, no /allow-all.
   const allow = readOnly ? [...READ_ALLOW] : [...BASE_ALLOW];
@@ -36,6 +37,8 @@ export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, gran
   }
   // The browser the client opened with /browser: its tools, in every phase and in a spike.
   if (browser) allow.push(BROWSER_SERVER);
+  // graph: the --additional-mcp-config of the code map (an `@file`): its tools that read
+  if (graph) allow.push(...graphTools());
   return [
     '-p', prompt,
     '--output-format', 'json', '--stream', 'on',
@@ -52,12 +55,13 @@ export function buildArgs({ prompt, sessionId, writeOpen, readOnly = false, gran
     ...attachments.flatMap((path) => ['--attachment', path]),
     // directories whose .github/agents Copilot loads: agents TeamForge keeps outside the project
     ...agentDirs.flatMap((dir) => ['--add-dir', dir]),
+    ...(graph ? ['--additional-mcp-config', graph] : []),
     ...(browser ? ['--additional-mcp-config', browser, '--deny-tool', ...BROWSER_DENIED.map((t) => `${BROWSER_SERVER}(${t})`)] : []),
     '--allow-tool', ...allow, // variadic: must stay last
   ];
 }
 
-const isServerName = (s) => typeof s === 'string' && /^[\w.-]{1,64}$/.test(s) && s !== BROWSER_SERVER;
+const isServerName = (s) => typeof s === 'string' && /^[\w.-]{1,64}$/.test(s) && s !== BROWSER_SERVER && s !== GRAPH_SERVER;
 
 // A turn is a fresh `copilot` process, and by default it loads everything the user
 // set up for their own sessions: plugins, their hooks, a dozen MCP servers. None of

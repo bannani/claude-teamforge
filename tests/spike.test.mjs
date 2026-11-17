@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { createTeamforgeServer } from '../worker/server.mjs';
 import { buildArgs } from '../worker/providers/copilot.mjs';
 import { spikePrompt } from '../worker/agent/prompt.mjs';
+import { toChatEvent } from '../worker/providers/copilot.mjs';
+import { ADVISOR_AGENT, ADVISOR_MODEL, SPIKE_MODEL } from '../worker/agent/spike-team.mjs';
+import { GRAPH_SERVER, GRAPH_TOOLS, graphTools } from '../worker/agent/graph.mjs';
 import { TECH_MARKER, groupSteps, splitAnswer } from '../dashboard/src/spike.js';
 
 const H = { 'content-type': 'application/json' };
@@ -14,6 +17,9 @@ const allowed = (args) => args.slice(args.indexOf('--allow-tool') + 1);
 let server; let db; let base;
 const runs = [];
 let script = async () => {};
+const maps = []; // { project, dir } a code map was asked for
+const NO_MAP = { graph: null, ok: false, line: 'no code map — graphify is not installed' };
+let mapResult = NO_MAP;
 
 before(async () => {
   const dir = mkdtempSync(join(tmpdir(), 'tf-spike-'));
@@ -21,6 +27,7 @@ before(async () => {
     dbPath: join(dir, 'spike.db'),
     provider: () => ({ provider: 'copilot', label: 'GitHub Copilot', model: null }),
     run: async (call) => { runs.push(call); await script(call); return { exitCode: 0, stderr: '' }; },
+    graphs: { prepare: async (projectPath, dir) => { maps.push({ projectPath, dir }); return mapResult; }, status: () => 'map status', stopAll() {} },
   }));
   await new Promise((r) => { server.listen(0, '127.0.0.1', r); });
   base = `http://127.0.0.1:${server.address().port}`;
@@ -129,10 +136,10 @@ test('/spike: the next message is a read-only question answered by the analysis 
 
   const working = (s, role) => s.agents.find((a) => a.role === role).status;
   assert.equal(during.session.kind, 'spike');
-  assert.equal(working(during, 'architect'), 'working');
   assert.equal(working(during, 'analyst'), 'working');
+  assert.equal(working(during, 'architect'), 'idle', 'the CTO sits down only when the analyst consults them');
   const after_ = await state(p);
-  assert.equal(working(after_, 'architect'), 'idle');
+  assert.equal(working(after_, 'analyst'), 'idle');
   assert.equal(after_.session.phase, 'idea', 'a spike has no pipeline');
 });
 
@@ -236,4 +243,112 @@ test('/export has nothing to do outside a spike or before an answer', async () =
   await send(p, '/export');
   assert.match((await history(p)).messages.at(-1).text, /switch to spike mode/);
   assert.ok(!existsSync(join(p, 'docs', 'spikes')));
+});
+
+// ---------- who answers, and the code graph ----------
+
+const flag = (args, name) => args.flatMap((a, i) => (a === name ? [args[i + 1]] : []));
+
+test('a spike is read on a light model, with the CTO as advisor on a stronger one', async () => {
+  const p = project();
+  await send(p, '/spike');
+  script = say(ANSWER);
+  await send(p, 'how are refills counted?');
+  await idle(p);
+  const { args } = runs.at(-1);
+  assert.deepEqual(flag(args, '--model'), [SPIKE_MODEL]);
+  const home = flag(args, '--add-dir').find((d) => d.endsWith('spike-home'));
+  const advisor = readFileSync(join(home, '.github', 'agents', `${ADVISOR_AGENT}.agent.md`), 'utf8');
+  assert.match(advisor, new RegExp(`^model: ${ADVISOR_MODEL}$`, 'm'));
+  assert.match(advisor, /Verdict/);
+  assert.ok(args[1].includes(`agent_type ${ADVISOR_AGENT}`), 'the briefing says how to consult the advisor');
+  assert.ok(!existsSync(join(p, '.github')), 'nothing is written in the project');
+
+  await send(p, '/spike model claude-haiku-4.5');
+  await send(p, '/spike advisor claude-opus-5.5');
+  assert.match((await history(p)).messages.at(-1).text, /`claude-haiku-4\.5`.*`claude-opus-5\.5`/);
+  await send(p, 'and for children?');
+  await idle(p);
+  assert.deepEqual(flag(runs.at(-1).args, '--model'), ['claude-haiku-4.5']);
+  assert.match(readFileSync(join(home, '.github', 'agents', `${ADVISOR_AGENT}.agent.md`), 'utf8'), /^model: claude-opus-5\.5$/m);
+  await send(p, '/spike advisor default');
+  assert.match((await history(p)).messages.at(-1).text, new RegExp(`CTO advises on \`${ADVISOR_MODEL.replaceAll('.', '\\.')}\``));
+  await send(p, '/spike advisor not a model');
+  assert.match((await history(p)).messages.at(-1).text, /model:|advisor <name/);
+});
+
+test('the advisor shows as the CTO at work, on their model', () => {
+  const calls = new Map(); const agents = new Map();
+  const start = toChatEvent({ type: 'subagent.started', data: { agentName: ADVISOR_AGENT, toolCallId: 't1', model: ADVISOR_MODEL } }, calls, agents);
+  assert.deepEqual([start.type, start.role, start.model], ['agent_start', 'architect', ADVISOR_MODEL]);
+  assert.equal(toChatEvent({ type: 'subagent.completed', data: { toolCallId: 't1' } }, calls, agents).role, 'architect');
+});
+
+test('the code map: its server and only its reading tools are given to the turn', async () => {
+  const p = project();
+  mapResult = { graph: { url: 'http://127.0.0.1:47000/mcp', key: 'k3y' }, ok: true, line: 'uses the map of the code: 494 symbols, 930 links' };
+  try {
+    await send(p, '/spike');
+    script = say(ANSWER);
+    const before_ = maps.length;
+    await send(p, 'how are refills counted?');
+    const h = await idle(p);
+    assert.equal(maps.length, before_ + 1);
+    assert.equal(maps.at(-1).projectPath, p);
+    assert.ok(!maps.at(-1).dir.startsWith(p), 'the map lives in TeamForge\'s data directory');
+    const { args } = runs.at(-1);
+    for (const t of graphTools()) assert.ok(allowed(args).includes(t), t);
+    assert.ok(!allowed(args).some((t) => /list_prs|triage_prs|get_pr_impact|get_community/.test(t)) && !allowed(args).includes(GRAPH_SERVER), 'only the tools that read the map');
+    const config = flag(args, '--additional-mcp-config').map((f) => JSON.parse(readFileSync(f.slice(1), 'utf8'))).find((c) => c.mcpServers[GRAPH_SERVER]);
+    assert.deepEqual(config.mcpServers[GRAPH_SERVER], { type: 'http', url: 'http://127.0.0.1:47000/mcp', headers: { 'X-API-Key': 'k3y' }, tools: GRAPH_TOOLS });
+    assert.match(args[1], /## The code map/);
+    assert.match(readFileSync(join(flag(args, '--add-dir').find((d) => d.endsWith('spike-home')), '.github', 'agents', `${ADVISOR_AGENT}.agent.md`), 'utf8'), /codegraph/);
+    assert.ok(h.messages.some((m) => m.role === 'tool' && m.name === 'graphify' && /494 symbols, 930 links/.test(m.summary)));
+
+    await send(p, 'and for children?');
+    await idle(p);
+    assert.doesNotMatch(runs.at(-1).args[1], /## The code map/, 'told once per conversation');
+    for (const t of graphTools()) assert.ok(allowed(runs.at(-1).args).includes(t));
+  } finally { mapResult = NO_MAP; }
+});
+
+test('a map that is ready only later is explained on the first turn that has it', async () => {
+  const p = project();
+  mapResult = { graph: null, ok: true, line: 'is mapping the code in the background' };
+  try {
+    await send(p, '/spike');
+    script = say(ANSWER);
+    await send(p, 'first question');
+    const h = await idle(p);
+    assert.doesNotMatch(runs.at(-1).args[1], /## The code map/);
+    assert.ok(!flag(runs.at(-1).args, '--additional-mcp-config').length);
+    assert.ok(h.messages.some((m) => m.role === 'tool' && m.ok && /in the background/.test(m.summary)));
+    mapResult = { graph: { url: 'http://127.0.0.1:47001/mcp', key: 'k' }, ok: true, line: 'uses the map of the code' };
+    await send(p, 'second question');
+    await idle(p);
+    assert.match(runs.at(-1).args[1], /^second question[\s\S]*## The code map/);
+  } finally { mapResult = NO_MAP; }
+});
+
+test('without graphify the spike goes on, reading the code as before', async () => {
+  const p = project();
+  await send(p, '/spike');
+  script = say(ANSWER);
+  await send(p, 'how are refills counted?');
+  const h = await idle(p);
+  const { args } = runs.at(-1);
+  assert.ok(!allowed(args).some((t) => t.includes(GRAPH_SERVER)));
+  assert.doesNotMatch(args[1], /## The code map/);
+  assert.ok(h.messages.some((m) => m.role === 'tool' && m.name === 'graphify' && m.ok === false && /not installed/.test(m.summary)));
+  assert.equal(h.messages.at(-1).text, ANSWER);
+});
+
+test('a mission neither opens a code map nor gets the advisor', async () => {
+  const p = project();
+  script = say('ok');
+  const before_ = maps.length;
+  await send(p, 'build a todo app');
+  await idle(p);
+  assert.equal(maps.length, before_);
+  assert.ok(!flag(runs.at(-1).args, '--add-dir').some((d) => d.endsWith('spike-home')));
 });
